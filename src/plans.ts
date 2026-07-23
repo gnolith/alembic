@@ -15,8 +15,8 @@ import {
 const PLAN_LIFETIME_MS = 15 * 60 * 1000;
 export const COMPATIBILITY = {
   alembic: ALEMBIC_VERSION,
-  seedbed: "@gnolith/seedbed@0.1.0",
-  workshop: "@gnolith/workshop@0.1.0",
+  seedbed: "@gnolith/seedbed@0.4.0",
+  workshop: "@gnolith/workshop@0.5.0",
   legacy: "@gnolith/codex-plugin@0.2.0"
 } as const;
 
@@ -31,7 +31,7 @@ export async function createPlan(request: PlanRequest, seedbed?: SeedbedControl)
     invariant(normalized.docker !== undefined, "docker-request-required", "Docker installation request is required");
     invariant(normalized.docker.endpoint === endpoint.href.replace(/\/$/u, ""), "docker-endpoint-mismatch", "Seedbed endpoint differs from plan");
     seedbedPlan = await seedbed.plan(normalized.docker);
-    invariant(seedbedPlan.version === "0.1.0", "seedbed-version-mismatch", "Seedbed plan version is incompatible");
+    invariant(seedbedPlan.version === "0.4.0", "seedbed-version-mismatch", "Seedbed plan version is incompatible");
     invariant(/^[0-9a-f]{64}$/u.test(seedbedPlan.digest), "seedbed-plan-digest", "Seedbed plan digest is invalid");
     invariant(
       seedbedPlan.stateRoot.kind === "external-directory" &&

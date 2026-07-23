@@ -21,7 +21,7 @@ export async function temporaryProject(): Promise<string> {
 export const expectedStatus: ExpectedWorkshopStatus = {
   installationId: "installation-test",
   baseIri: "https://example.test/base/",
-  serverVersion: "0.1.0",
+  serverVersion: "0.5.0",
   operationVersion: "1",
   catalogDigest: "a".repeat(64),
   migrationReady: true,
@@ -51,7 +51,7 @@ export const workshopStatus: WorkshopStatusOutput = {
   semanticState: { state: "ready", configured: true },
   producers: { ready: true, fingerprint: "producer-fingerprint", kinds: ["task", "memory", "prompt"] },
   blobReady: true,
-  versions: { server: "0.1.0", operationSchema: 1 },
+  versions: { server: "0.5.0", operationSchema: 1 },
   operationCatalogDigest: "a".repeat(64)
 };
 
@@ -96,7 +96,7 @@ export class MockSeedbed implements SeedbedControl {
     return {
       id: "seedbed-plan",
       digest: sha256(canonicalJson(request)),
-      version: "0.1.0",
+      version: "0.4.0",
       request,
       steps: ["fixed Seedbed assembly"],
       stateRoot: {
@@ -127,7 +127,7 @@ export class MockSeedbed implements SeedbedControl {
     return {
       operationId: "seedbed-operation",
       state: "ready",
-      version: "0.1.0",
+      version: "0.4.0",
       digest: "c".repeat(64),
       endpoint: plan.request.endpoint,
       installationId: plan.request.installationId,
