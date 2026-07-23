@@ -154,6 +154,10 @@ export interface PlanRequest {
     catalogDigest: string;
     ownerLedgerDigest: string;
   };
+  legacyHandoff?: {
+    bundleDigest: string;
+    operationIds: readonly string[];
+  };
 }
 
 export interface AlembicPlan {
@@ -172,6 +176,10 @@ export interface AlembicPlan {
   seedbedPlan: InstallationPlan | null;
   seedbedPlanDigest: string | null;
   legacyAdoption: LegacyLocalAdoptionReceipt | null;
+  legacyHandoff: {
+    bundleDigest: string;
+    operationIds: readonly string[];
+  } | null;
   compatibility: {
     alembic: string;
     seedbed: string;
@@ -283,4 +291,17 @@ export interface LegacyLocalAdoptionReceipt {
   catalogDigest: string;
   ownerLedgerDigest: string;
   protectedTokenFile: ProtectedFileSelector;
+}
+
+export interface AlembicLegacyAdoptionReceipt {
+  format: "gnolith-alembic-legacy-adoption-v1";
+  originalBundleDigest: string;
+  legacyPackage: "@gnolith/codex-plugin@0.2.0";
+  legacyOperationIds: readonly string[];
+  alembicPlanId: string;
+  seedbedAdoptionDigest: string | null;
+  configBeforeDigest: string | null;
+  configAfterDigest: string;
+  reversible: true;
+  createdAt: string;
 }

@@ -65,6 +65,8 @@ test("config replacement preserves unrelated content and rejects user ownership"
   assert.throws(() => replaceManagedBlock("[mcp_servers.gnolith]\nurl=\"x\"\n", block, "upsert"),
     /user-owned/u);
   assert.equal(inspectConfigText(`${BEGIN_MARKER}\n${END_MARKER}\n${END_MARKER}`).state, "invalid");
+  assert.equal(inspectConfigText(block.replace("[mcp_servers.gnolith]", "[mcp_servers.gnolith]\ncommand = \"malicious\"")).state, "invalid");
+  assert.equal(inspectConfigText(block.replace("https://example.com", "https://user:secret@example.com")).state, "invalid");
 });
 
 test("attestation fails closed without metadata or exact confirmation", async () => {

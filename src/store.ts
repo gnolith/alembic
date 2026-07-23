@@ -3,7 +3,7 @@ import { mkdir, open, readFile, rename, rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { invariant } from "./errors.js";
-import type { AlembicPlan, AlembicReceipt } from "./types.js";
+import type { AlembicLegacyAdoptionReceipt, AlembicPlan, AlembicReceipt } from "./types.js";
 
 export class OperationStore {
   constructor(private readonly projectRoot: string) {}
@@ -34,6 +34,15 @@ export class OperationStore {
     return JSON.parse(
       await readFile(join(this.base(), "operations", `${operationId}.json`), "utf8")
     ) as AlembicReceipt;
+  }
+
+  async writeAdoption(operationId: string, receipt: AlembicLegacyAdoptionReceipt): Promise<void> {
+    validateId(operationId, "op_");
+    await this.atomic(
+      join(this.base(), "adoptions", `${operationId}.json`),
+      JSON.stringify(receipt, null, 2) + "\n",
+      true
+    );
   }
 
   private async atomic(path: string, content: string, replace: boolean): Promise<void> {

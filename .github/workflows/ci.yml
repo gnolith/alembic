@@ -25,6 +25,7 @@ jobs:
       - run: npm test
       - run: npm run test:security
       - run: npm run test:plugin
+      - run: npm run build
       - run: npm audit --omit=dev --audit-level=high
       - run: npm pack --dry-run
   required:

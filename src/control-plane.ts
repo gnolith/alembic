@@ -1,18 +1,13 @@
-import { readFile } from "node:fs/promises";
+import { lstat, readFile, realpath } from "node:fs/promises";
 import { applyPlan, resumeOperation, type ApplyDependencies } from "./apply.js";
 import { inspectConfig } from "./config.js";
 import { publicError } from "./canonical.js";
+import { invariant } from "./errors.js";
 import { inspectLegacyBundle } from "./legacy.js";
 import { createPlan } from "./plans.js";
 import { attestProject } from "./project.js";
 import { OperationStore } from "./store.js";
-import type {
-  AlembicPlan,
-  HostMetadataV1,
-  LegacyHandoffBundle,
-  PlanRequest,
-  SeedbedControl
-} from "./types.js";
+import type { AlembicPlan, HostMetadataV1, PlanRequest, SeedbedControl } from "./types.js";
 
 export interface ControlPlaneDependencies extends ApplyDependencies {
   seedbed?: SeedbedControl;
@@ -72,17 +67,36 @@ export class AlembicControlPlane {
     return createPlan(request, this.dependencies.seedbed);
   }
 
-  async apply(input: { projectRoot: string; planId: string }) {
-    const plan = await new OperationStore(input.projectRoot).readPlan(input.planId);
+  async apply(input: {
+    taskDirectory: string;
+    confirmedProjectRoot?: string;
+    hostMetadata?: HostMetadataV1;
+    planId: string;
+  }) {
+    const project = await attestProject(input);
+    const plan = await new OperationStore(project.root).readPlan(input.planId);
+    invariant(plan.project.identity === project.identity, "plan-scope-mismatch", "Current project attestation does not match the plan");
     return applyPlan(plan, this.dependencies);
   }
 
-  async operationRead(input: { projectRoot: string; operationId: string }) {
-    return new OperationStore(input.projectRoot).readReceipt(input.operationId);
+  async operationRead(input: {
+    taskDirectory: string;
+    confirmedProjectRoot?: string;
+    hostMetadata?: HostMetadataV1;
+    operationId: string;
+  }) {
+    const project = await attestProject(input);
+    return new OperationStore(project.root).readReceipt(input.operationId);
   }
 
-  async operationResume(input: { projectRoot: string; operationId: string }) {
-    return resumeOperation(input.projectRoot, input.operationId, this.dependencies);
+  async operationResume(input: {
+    taskDirectory: string;
+    confirmedProjectRoot?: string;
+    hostMetadata?: HostMetadataV1;
+    operationId: string;
+  }) {
+    const project = await attestProject(input);
+    return resumeOperation(project.root, input.operationId, this.dependencies);
   }
 
   async diagnose(input: {
@@ -102,7 +116,13 @@ export class AlembicControlPlane {
     return {
       purpose: "bounded-redacted-diagnosis",
       inspection,
-      seedbed,
+      seedbed: seedbed
+        ? {
+            installationId: seedbed.installationId,
+            classification: seedbed.classification,
+            restartAllowed: seedbed.restartAllowed
+          }
+        : null,
       allowedRepair: seedbed?.restartAllowed === true ? "resume-or-restart-recorded-components" : "none",
       forbidden: [
         "migration",
@@ -120,41 +140,66 @@ export class AlembicControlPlane {
   async legacyInspect(input: {
     bundlePath: string;
     taskDirectory: string;
-    configPath: string;
+    confirmedProjectRoot?: string;
+    hostMetadata?: HostMetadataV1;
     packageName: string;
     packageVersion: string;
   }) {
+    const project = await attestProject(input);
+    const bundlePath = await realpath(input.bundlePath);
+    const bundleInfo = await lstat(input.bundlePath);
+    if (
+      bundlePath !== input.bundlePath ||
+      bundleInfo.isSymbolicLink() ||
+      !bundleInfo.isFile() ||
+      !(bundlePath === project.root || bundlePath.startsWith(`${project.root}${process.platform === "win32" ? "\\" : "/"}`))
+    ) {
+      throw new Error("Legacy bundle must be an exact regular file inside the attested project");
+    }
     const bytes = await readFile(input.bundlePath);
     return inspectLegacyBundle({
       bytes,
       packageName: input.packageName,
       packageVersion: input.packageVersion,
-      exactTaskRoot: input.taskDirectory,
-      configPath: input.configPath
+      exactTaskRoot: project.root,
+      configPath: project.configPath
     });
   }
 
   async legacyAdopt(input: {
-    inspected: { bundle: LegacyHandoffBundle; disposition: string };
+    bundlePath: string;
+    taskDirectory: string;
+    confirmedProjectRoot?: string;
+    hostMetadata?: HostMetadataV1;
+    packageName: string;
+    packageVersion: string;
     planRequest?: PlanRequest;
   }) {
+    const inspected = await this.legacyInspect(input);
     if (
-      (input.inspected.disposition === "remote-verify" ||
-        input.inspected.disposition === "seedbed-offline-adoption-required") &&
+      (inspected.disposition === "remote-verify" ||
+        inspected.disposition === "seedbed-offline-adoption-required") &&
       input.planRequest
     ) {
       return {
         reversible: true,
-        originalBundleDigest: input.inspected.bundle.sha256,
-        plan: await createPlan({ ...input.planRequest, action: "adopt" }, this.dependencies.seedbed)
+        originalBundleDigest: inspected.bundle.sha256,
+        plan: await createPlan({
+          ...input.planRequest,
+          action: "adopt",
+          legacyHandoff: {
+            bundleDigest: inspected.bundle.sha256,
+            operationIds: inspected.bundle.receipts.map(({ operationId }) => operationId)
+          }
+        }, this.dependencies.seedbed)
       };
     }
     return {
       reversible: true,
-      originalBundleDigest: input.inspected.bundle.sha256,
+      originalBundleDigest: inspected.bundle.sha256,
       requiresNewPlan: true,
       requirement:
-        input.inspected.disposition === "seedbed-offline-adoption-required"
+        inspected.disposition === "seedbed-offline-adoption-required"
           ? "Obtain a successful Seedbed legacy-local-v1 offline adoption receipt, compare all evidence, then create a new Alembic adoption plan."
           : "This obsolete mode requires a new supported Alembic plan."
     };

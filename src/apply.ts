@@ -1,4 +1,4 @@
-import { canonicalJson, sha256 } from "./canonical.js";
+import { canonicalJson, redact, sha256 } from "./canonical.js";
 import { atomicConfigWrite, inspectConfig, renderManagedBlock, replaceManagedBlock } from "./config.js";
 import { AlembicError, invariant } from "./errors.js";
 import { currentConfigDigest } from "./project.js";
@@ -161,6 +161,23 @@ export async function applyPlan(
     });
     receipt = { ...receipt, configAfterDigest: afterDigest };
     receipt = await checkpoint(store, receipt, "config-write", "after");
+    if (plan.action === "adopt") {
+      invariant(plan.legacyHandoff !== null, "legacy-handoff-missing", "Adoption plan lacks its original handoff binding");
+      receipt = await checkpoint(store, receipt, "legacy-adoption-receipt", "before");
+      await store.writeAdoption(plan.operationId, {
+        format: "gnolith-alembic-legacy-adoption-v1",
+        originalBundleDigest: plan.legacyHandoff.bundleDigest,
+        legacyPackage: "@gnolith/codex-plugin@0.2.0",
+        legacyOperationIds: plan.legacyHandoff.operationIds,
+        alembicPlanId: plan.planId,
+        seedbedAdoptionDigest: plan.legacyAdoption ? sha256(canonicalJson(plan.legacyAdoption)) : null,
+        configBeforeDigest: plan.project.configDigest,
+        configAfterDigest: afterDigest,
+        reversible: true,
+        createdAt: new Date().toISOString()
+      });
+      receipt = await checkpoint(store, receipt, "legacy-adoption-receipt", "after");
+    }
     receipt = {
       ...receipt,
       state: "activation-required",
@@ -176,7 +193,10 @@ export async function applyPlan(
       ...receipt,
       state: prerequisite ? "activation-prerequisite" : "failed",
       updatedAt: new Date().toISOString(),
-      message: error instanceof Error ? error.message : "Apply failed"
+      message:
+        error instanceof AlembicError
+          ? String(redact(error.message))
+          : "Apply failed; run bounded diagnosis using the operation ID"
     };
     await store.writeReceipt(failed);
     throw error;

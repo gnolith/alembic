@@ -41,11 +41,41 @@ export function inspectConfigText(text: string): ConfigInspection {
   const begin = starts[0]!.index!;
   const end = ends[0]!.index! + END_MARKER.length;
   const block = text.slice(begin, end);
-  if (!block.includes("[mcp_servers.gnolith]")) {
+  const lines = block.replace(/\r\n?/gu, "\n").split("\n");
+  if (
+    lines.length !== 9 ||
+    lines[0] !== BEGIN_MARKER ||
+    lines[1] !== "[mcp_servers.gnolith]" ||
+    !/^url = "[^"\r\n]+"$/u.test(lines[2] ?? "") ||
+    ![
+      `bearer_token_env_var = "${LOCAL_BEARER_ENV}"`,
+      'auth = "oauth"'
+    ].includes(lines[3] ?? "") ||
+    lines[4] !== "required = false" ||
+    lines[5] !== "startup_timeout_sec = 20" ||
+    lines[6] !== "tool_timeout_sec = 60" ||
+    lines[7] !== 'default_tools_approval_mode = "writes"' ||
+    lines[8] !== END_MARKER
+  ) {
     return { state: "invalid", digest: sha256(text), block, endpoint: null };
   }
   const endpoint = block.match(/^url = "([^"\r\n]+)"$/mu)?.[1] ?? null;
-  return { state: endpoint ? "complete" : "invalid", digest: sha256(text), block, endpoint };
+  try {
+    const parsed = new URL(endpoint ?? "");
+    if (
+      parsed.username !== "" ||
+      parsed.password !== "" ||
+      parsed.pathname !== "/mcp" ||
+      parsed.search !== "" ||
+      parsed.hash !== "" ||
+      !["http:", "https:"].includes(parsed.protocol)
+    ) {
+      return { state: "invalid", digest: sha256(text), block, endpoint: null };
+    }
+  } catch {
+    return { state: "invalid", digest: sha256(text), block, endpoint: null };
+  }
+  return { state: "complete", digest: sha256(text), block, endpoint };
 }
 
 export async function inspectConfig(path: string): Promise<ConfigInspection> {

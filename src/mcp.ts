@@ -2,6 +2,7 @@
 import { createInterface } from "node:readline";
 import { AlembicControlPlane } from "./control-plane.js";
 import { invariant } from "./errors.js";
+import { publicError } from "./canonical.js";
 import { TOOL_CATALOG } from "./tool-catalog.js";
 import type { PlanRequest } from "./types.js";
 
@@ -21,11 +22,12 @@ for await (const line of input) {
     const result = await handle(request);
     process.stdout.write(JSON.stringify({ jsonrpc: "2.0", id: request.id ?? null, result }) + "\n");
   } catch (error) {
+    const safe = publicError(error);
     process.stdout.write(
       JSON.stringify({
         jsonrpc: "2.0",
         id: null,
-        error: { code: -32000, message: error instanceof Error ? error.message : "Alembic request failed" }
+        error: { code: -32000, message: safe.message, data: { classification: safe.code } }
       }) + "\n"
     );
   }

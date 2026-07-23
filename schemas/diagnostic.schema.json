@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://gnolith.dev/schemas/alembic/diagnostic-v1.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["format", "classification", "projectRoot", "managedState", "expectedIdentity", "observedIdentity", "activationPending", "repair"],
+  "properties": {
+    "format": { "const": "gnolith-alembic-diagnostic-v1" },
+    "classification": {
+      "enum": ["ready", "activation-pending", "config-conflict", "scope-denied", "network", "tls", "authentication", "identity", "catalog", "readiness", "seedbed", "unknown"]
+    },
+    "projectRoot": { "type": "string" },
+    "managedState": { "enum": ["absent", "complete", "invalid", "user-owned"] },
+    "expectedIdentity": { "type": ["object", "null"] },
+    "observedIdentity": { "type": ["object", "null"] },
+    "activationPending": { "type": "boolean" },
+    "repair": { "enum": ["none", "resume-exact-operation", "restart-recorded-components", "new-approved-plan"] }
+  }
+}

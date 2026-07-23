@@ -30,9 +30,14 @@ export interface WorkshopTransport {
 }
 
 export class FetchWorkshopTransport implements WorkshopTransport {
+  constructor(
+    private readonly timeoutMs = 15_000,
+    private readonly maxResponseBytes = 1_048_576
+  ) {}
+
   async call(endpoint: URL, token: string, method: string, params: unknown, sessionId?: string) {
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 15_000);
+    const timer = setTimeout(() => controller.abort(), this.timeoutMs);
     try {
       const headers: Record<string, string> = {
         accept: "application/json, text/event-stream",
@@ -50,9 +55,9 @@ export class FetchWorkshopTransport implements WorkshopTransport {
       });
       invariant(response.ok, "workshop-http", `Workshop returned HTTP ${response.status}`);
       const length = Number(response.headers.get("content-length") ?? "0");
-      invariant(length <= 1_048_576, "response-too-large", "Workshop response exceeds 1 MiB");
+      invariant(length <= this.maxResponseBytes, "response-too-large", "Workshop response exceeds configured bound");
       const body = await response.text();
-      invariant(Buffer.byteLength(body) <= 1_048_576, "response-too-large", "Workshop response exceeds 1 MiB");
+      invariant(Buffer.byteLength(body) <= this.maxResponseBytes, "response-too-large", "Workshop response exceeds configured bound");
       const parsed = parseMcpBody(body) as RpcResponse;
       invariant(parsed.jsonrpc === "2.0" && parsed.error === undefined, "workshop-rpc", "Workshop MCP call failed");
       const returnedSession = response.headers.get("mcp-session-id") ?? undefined;

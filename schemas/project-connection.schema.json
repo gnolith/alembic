@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://gnolith.dev/schemas/alembic/project-connection-v1.json",
+  "title": "Alembic-managed Gnolith Codex connection",
+  "oneOf": [
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["url", "bearer_token_env_var", "required", "startup_timeout_sec", "tool_timeout_sec", "default_tools_approval_mode"],
+      "properties": {
+        "url": { "type": "string", "pattern": "^https?://[^@?#]+/mcp$" },
+        "bearer_token_env_var": { "const": "GNOLITH_BEARER_TOKEN" },
+        "required": { "const": false },
+        "startup_timeout_sec": { "const": 20 },
+        "tool_timeout_sec": { "const": 60 },
+        "default_tools_approval_mode": { "const": "writes" }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["url", "auth", "required", "startup_timeout_sec", "tool_timeout_sec", "default_tools_approval_mode"],
+      "properties": {
+        "url": { "type": "string", "pattern": "^https://[^@?#]+/mcp$" },
+        "auth": { "const": "oauth" },
+        "required": { "const": false },
+        "startup_timeout_sec": { "const": 20 },
+        "tool_timeout_sec": { "const": 60 },
+        "default_tools_approval_mode": { "const": "writes" }
+      }
+    }
+  ]
+}

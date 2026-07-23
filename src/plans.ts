@@ -56,6 +56,7 @@ export async function createPlan(request: PlanRequest, seedbed?: SeedbedControl)
     seedbedPlan,
     seedbedPlanDigest: seedbedPlan?.digest ?? null,
     legacyAdoption: normalized.legacyAdoption ?? null,
+    legacyHandoff: normalized.legacyHandoff ?? null,
     compatibility: COMPATIBILITY,
     approvedSteps:
       normalized.action === "remove"
@@ -100,6 +101,9 @@ function validatePlanRequest(request: PlanRequest): void {
   invariant(request.expected.installationId.length > 0, "expected-identity-required", "Expected installation ID is required");
   invariant(request.expected.baseIri.length > 0, "expected-base-required", "Expected base IRI is required");
   invariant(request.expected.catalogDigest.length === 64, "catalog-digest-required", "Expected catalog digest is required");
+  if (request.action === "adopt") {
+    invariant(request.legacyHandoff !== undefined, "legacy-handoff-required", "Adoption requires the exact inspected legacy handoff binding");
+  }
 }
 
 function normalizeRequest(request: PlanRequest): PlanRequest {
@@ -162,5 +166,15 @@ function normalizeRequest(request: PlanRequest): PlanRequest {
     };
   }
   if (request.legacyEvidence !== undefined) normalized.legacyEvidence = { ...request.legacyEvidence };
+  if (request.legacyHandoff !== undefined) {
+    invariant(/^[0-9a-f]{64}$/u.test(request.legacyHandoff.bundleDigest),
+      "legacy-handoff-digest", "Legacy handoff digest is invalid");
+    invariant(request.legacyHandoff.operationIds.length <= 1000,
+      "legacy-operation-bound", "Legacy handoff has too many operation identifiers");
+    normalized.legacyHandoff = {
+      bundleDigest: request.legacyHandoff.bundleDigest,
+      operationIds: [...request.legacyHandoff.operationIds]
+    };
+  }
   return normalized;
 }
