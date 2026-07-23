@@ -32,7 +32,13 @@ export async function createPlan(request: PlanRequest, seedbed?: SeedbedControl)
     invariant(normalized.docker.endpoint === endpoint.href.replace(/\/$/u, ""), "docker-endpoint-mismatch", "Seedbed endpoint differs from plan");
     seedbedPlan = await seedbed.plan(normalized.docker);
     invariant(seedbedPlan.version === "0.1.0", "seedbed-version-mismatch", "Seedbed plan version is incompatible");
-    invariant(seedbedPlan.digest === sha256(canonicalJson(seedbedPlan.request)), "seedbed-plan-digest", "Seedbed plan digest is invalid");
+    invariant(/^[0-9a-f]{64}$/u.test(seedbedPlan.digest), "seedbed-plan-digest", "Seedbed plan digest is invalid");
+    invariant(
+      seedbedPlan.stateRoot.kind === "external-directory" &&
+        seedbedPlan.stateRoot.canonicalPath.length > 0,
+      "seedbed-state-root",
+      "Seedbed plan lacks its attested opaque external state selector"
+    );
   }
   if (normalized.action === "adopt" && normalized.mode === "docker-local") {
     invariant(normalized.legacyAdoption !== undefined && normalized.legacyEvidence !== undefined,
@@ -55,6 +61,7 @@ export async function createPlan(request: PlanRequest, seedbed?: SeedbedControl)
     expected: { ...normalized.expected, allowLexicalOnly: normalized.acceptLexicalOnly === true },
     seedbedPlan,
     seedbedPlanDigest: seedbedPlan?.digest ?? null,
+    seedbedStateRoot: normalized.seedbedStateRoot ?? null,
     legacyAdoption: normalized.legacyAdoption ?? null,
     legacyHandoff: normalized.legacyHandoff ?? null,
     compatibility: COMPATIBILITY,
@@ -90,7 +97,7 @@ function validatePlanRequest(request: PlanRequest): void {
   exactAllowedKeys(request, [
     "taskDirectory", "confirmedProjectRoot", "hostMetadata", "action", "mode", "endpoint",
     "authentication", "expected", "docker", "acceptLexicalOnly", "legacyAdoption",
-    "legacyEvidence", "legacyHandoff"
+    "legacyEvidence", "legacyHandoff", "seedbedStateRoot"
   ], "plan request");
   invariant(["create", "connect", "repair", "rebind", "remove", "adopt"].includes(request.action),
     "action-denied", "Unsupported action");
@@ -126,7 +133,7 @@ function validatePlanRequest(request: PlanRequest): void {
   exactAllowedKeys(request.expected, [
     "installationId", "baseIri", "serverVersion", "operationVersion", "catalogDigest",
     "migrationReady", "canonicalReady", "authorizationReady", "lexicalReady",
-    "producerStatus", "semanticState", "allowLexicalOnly"
+    "blobReady", "producerStatus", "semanticState", "allowLexicalOnly"
   ], "expected Workshop status");
   invariant(validIdentifier(request.expected.installationId), "expected-identity-required", "Expected installation ID is invalid");
   invariant(validAbsoluteIri(request.expected.baseIri), "expected-base-required", "Expected base IRI is invalid");
@@ -140,7 +147,7 @@ function validatePlanRequest(request: PlanRequest): void {
     exactAllowedKeys(request.docker.expected, [
       "installationId", "baseIri", "serverVersion", "operationVersion", "catalogDigest",
       "migrationReady", "canonicalReady", "authorizationReady", "lexicalReady",
-      "producerStatus", "semanticState", "allowLexicalOnly"
+      "blobReady", "producerStatus", "semanticState", "allowLexicalOnly"
     ], "Docker expected Workshop status");
     invariant(
       canonicalJson(request.docker.expected) === canonicalJson(request.expected),
@@ -221,6 +228,7 @@ function normalizeRequest(request: PlanRequest): PlanRequest {
     canonicalReady: request.expected.canonicalReady,
     authorizationReady: request.expected.authorizationReady,
     lexicalReady: request.expected.lexicalReady,
+    blobReady: request.expected.blobReady,
     producerStatus: request.expected.producerStatus,
     semanticState: request.expected.semanticState,
     allowLexicalOnly: request.acceptLexicalOnly === true
@@ -236,6 +244,7 @@ function normalizeRequest(request: PlanRequest): PlanRequest {
   if (request.confirmedProjectRoot !== undefined) normalized.confirmedProjectRoot = request.confirmedProjectRoot;
   if (request.hostMetadata !== undefined) normalized.hostMetadata = { ...request.hostMetadata };
   if (request.acceptLexicalOnly !== undefined) normalized.acceptLexicalOnly = request.acceptLexicalOnly;
+  if (request.seedbedStateRoot !== undefined) normalized.seedbedStateRoot = request.seedbedStateRoot;
   if (request.docker !== undefined) {
     normalized.docker = {
       installationId: request.docker.installationId,

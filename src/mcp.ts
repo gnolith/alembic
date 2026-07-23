@@ -5,6 +5,7 @@ import { invariant } from "./errors.js";
 import { publicError } from "./canonical.js";
 import { TOOL_CATALOG } from "./tool-catalog.js";
 import type { PlanRequest } from "./types.js";
+import { loadDefaultSeedbedFactory } from "./seedbed.js";
 
 interface JsonRpcRequest {
   jsonrpc: "2.0";
@@ -13,7 +14,8 @@ interface JsonRpcRequest {
   params?: { name?: string; arguments?: Record<string, unknown> };
 }
 
-const control = new AlembicControlPlane();
+const seedbedFactory = await loadDefaultSeedbedFactory().catch(() => undefined);
+const control = new AlembicControlPlane(seedbedFactory ? { seedbedFactory } : {});
 const input = createInterface({ input: process.stdin });
 for await (const line of input) {
   let request: JsonRpcRequest;

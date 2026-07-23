@@ -99,6 +99,18 @@ test("host trust, policy, scope spoofing, traversal, and nested precedence fail 
     /normalized|directory/u);
 });
 
+test("symlink or junction config parents are rejected", async () => {
+  const root = await temporaryProject();
+  const external = await temporaryProject();
+  const { rm, symlink } = await import("node:fs/promises");
+  await rm(join(root, ".codex"), { recursive: true });
+  await symlink(join(external, ".codex"), join(root, ".codex"), process.platform === "win32" ? "junction" : "dir");
+  await assert.rejects(
+    attestProject({ taskDirectory: root, confirmedProjectRoot: root }),
+    /unsafe|alias/u
+  );
+});
+
 test("endpoint policy denies cleartext remote, credential URL, and private remote", async () => {
   await assert.rejects(approveEndpoint("http://example.com/mcp", "remote"), /HTTPS/u);
   await assert.rejects(approveEndpoint("https://user:password@example.com/mcp", "remote"), /Credentials/u);

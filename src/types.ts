@@ -63,9 +63,31 @@ export interface ExpectedWorkshopStatus {
   canonicalReady: boolean;
   authorizationReady: boolean;
   lexicalReady: boolean;
+  blobReady: boolean;
   producerStatus: "ready" | "degraded" | "absent";
   semanticState: "ready" | "degraded" | "absent";
   allowLexicalOnly: boolean;
+}
+
+export interface WorkshopStatusOutput {
+  installationId: string;
+  baseIri: string;
+  principalId: string;
+  credentialId: string;
+  activeWorkspaceId: string | null;
+  workspaceIds: readonly string[];
+  capabilities: readonly string[];
+  authorizationRevision: number;
+  migrationReadiness: { namespace: "@gnolith/workshop"; version: number; ready: boolean };
+  compatibility: { diamond: boolean; taproot: boolean };
+  canonicalReady: boolean;
+  authorizationReady: boolean;
+  lexicalReady: boolean;
+  semanticState: { state: "ready" | "degraded" | "unconfigured"; configured: boolean };
+  producers: { ready: boolean; fingerprint: string; kinds: readonly ("task" | "memory" | "prompt")[] };
+  blobReady: boolean;
+  versions: { server: string; operationSchema: 1 };
+  operationCatalogDigest: string;
 }
 
 export interface HostMetadataV1 {
@@ -108,6 +130,10 @@ export interface InstallationPlan {
   version: string;
   request: DockerInstallationRequest;
   steps: readonly string[];
+  stateRoot: {
+    kind: "external-directory";
+    canonicalPath: string;
+  };
 }
 export interface InstallationReceipt {
   operationId: string;
@@ -144,6 +170,7 @@ export interface PlanRequest {
   authentication: EnvironmentSelector | HostOAuthSelector;
   expected: ExpectedWorkshopStatus;
   docker?: DockerInstallationRequest;
+  seedbedStateRoot?: string;
   acceptLexicalOnly?: boolean;
   legacyAdoption?: LegacyLocalAdoptionReceipt;
   legacyEvidence?: {
@@ -175,6 +202,7 @@ export interface AlembicPlan {
   expected: ExpectedWorkshopStatus;
   seedbedPlan: InstallationPlan | null;
   seedbedPlanDigest: string | null;
+  seedbedStateRoot: string | null;
   legacyAdoption: LegacyLocalAdoptionReceipt | null;
   legacyHandoff: {
     bundleDigest: string;
@@ -223,7 +251,7 @@ export interface WorkshopVerification {
   identity: typeof WORKSHOP_IDENTITY;
   protocolVersion: string;
   tools: readonly string[];
-  status: ExpectedWorkshopStatus;
+  status: WorkshopStatusOutput;
   digest: string;
 }
 

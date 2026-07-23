@@ -1,5 +1,5 @@
 import { lstat, readFile, realpath } from "node:fs/promises";
-import { applyPlan, resumeOperation, type ApplyDependencies } from "./apply.js";
+import { applyPlan, type ApplyDependencies } from "./apply.js";
 import { inspectConfig } from "./config.js";
 import { publicError } from "./canonical.js";
 import { invariant } from "./errors.js";
@@ -11,6 +11,7 @@ import type { AlembicPlan, HostMetadataV1, PlanRequest, SeedbedControl } from ".
 
 export interface ControlPlaneDependencies extends ApplyDependencies {
   seedbed?: SeedbedControl;
+  seedbedFactory?: (projectRoot: string, approvedStateRoot?: string) => SeedbedControl;
 }
 
 export class AlembicControlPlane {
@@ -64,7 +65,8 @@ export class AlembicControlPlane {
   }
 
   async plan(request: PlanRequest): Promise<AlembicPlan> {
-    return createPlan(request, this.dependencies.seedbed);
+    const project = await attestProject(request);
+    return createPlan(request, this.seedbedFor(project.root, request.seedbedStateRoot));
   }
 
   async apply(input: {
@@ -76,7 +78,7 @@ export class AlembicControlPlane {
     const project = await attestProject(input);
     const plan = await new OperationStore(project.root).readPlan(input.planId);
     invariant(plan.project.identity === project.identity, "plan-scope-mismatch", "Current project attestation does not match the plan");
-    return applyPlan(plan, this.dependencies);
+    return applyPlan(plan, this.applyDependencies(project.root, plan.seedbedStateRoot ?? undefined));
   }
 
   async operationRead(input: {
@@ -96,7 +98,10 @@ export class AlembicControlPlane {
     operationId: string;
   }) {
     const project = await attestProject(input);
-    return resumeOperation(project.root, input.operationId, this.dependencies);
+    const store = new OperationStore(project.root);
+    const receipt = await store.readReceipt(input.operationId);
+    const plan = await store.readPlan(receipt.planId);
+    return applyPlan(plan, this.applyDependencies(project.root, plan.seedbedStateRoot ?? undefined), true);
   }
 
   async diagnose(input: {
@@ -105,6 +110,7 @@ export class AlembicControlPlane {
     hostMetadata?: HostMetadataV1;
     installationId?: string;
     operationId?: string;
+    seedbedStateRoot?: string;
   }) {
     const inspection = await this.inspect(input);
     let operation = null;
@@ -121,8 +127,9 @@ export class AlembicControlPlane {
       };
     }
     let seedbed = null;
-    if (input.installationId && this.dependencies.seedbed) {
-      seedbed = await this.dependencies.seedbed.diagnose({
+    const seedbedControl = this.seedbedFor(inspection.project.root, input.seedbedStateRoot);
+    if (input.installationId && seedbedControl) {
+      seedbed = await seedbedControl.diagnose({
         installationId: input.installationId,
         projectRoot: inspection.project.root
       });
@@ -247,5 +254,18 @@ export class AlembicControlPlane {
     } catch (error) {
       return { error: publicError(error) };
     }
+  }
+
+  private seedbedFor(projectRoot: string, approvedStateRoot?: string): SeedbedControl | undefined {
+    return this.dependencies.seedbedFactory?.(projectRoot, approvedStateRoot) ?? this.dependencies.seedbed;
+  }
+
+  private applyDependencies(projectRoot: string, approvedStateRoot?: string): ApplyDependencies {
+    const seedbed = this.seedbedFor(projectRoot, approvedStateRoot);
+    return {
+      ...(seedbed ? { seedbed } : {}),
+      ...(this.dependencies.oauthHost ? { oauthHost: this.dependencies.oauthHost } : {}),
+      ...(this.dependencies.workshopTransport ? { workshopTransport: this.dependencies.workshopTransport } : {})
+    };
   }
 }

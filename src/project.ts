@@ -1,4 +1,4 @@
-import { lstat, readFile } from "node:fs/promises";
+import { lstat, readFile, realpath } from "node:fs/promises";
 import { dirname, join, parse, resolve } from "node:path";
 import { canonicalDirectory, sha256 } from "./canonical.js";
 import { invariant } from "./errors.js";
@@ -70,6 +70,14 @@ export async function attestProject(input: {
 
   const configPath = resolve(root, ".codex", "config.toml");
   invariant(configPath.startsWith(root), "config-scope-mismatch", "Config path escaped project root");
+  try {
+    const codexDirectory = dirname(configPath);
+    const info = await lstat(codexDirectory);
+    invariant(info.isDirectory() && !info.isSymbolicLink(), "config-parent-link", "Codex config directory is unsafe");
+    invariant(await realpath(codexDirectory) === codexDirectory, "config-parent-link", "Codex config directory uses an alias");
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+  }
   const configDigest = await digestOrNull(configPath);
   const identity = sha256(`${root}\0${configPath}\0${configDigest ?? "absent"}`);
   return { root, configPath, configDigest, metadataVersion, trusted, confirmedFallback, identity };

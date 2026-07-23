@@ -7,7 +7,8 @@ import type {
   ExpectedWorkshopStatus,
   InstallationPlan,
   InstallationReceipt,
-  SeedbedControl
+  SeedbedControl,
+  WorkshopStatusOutput
 } from "../src/types.js";
 import type { WorkshopTransport } from "../src/workshop.js";
 
@@ -27,14 +28,36 @@ export const expectedStatus: ExpectedWorkshopStatus = {
   canonicalReady: true,
   authorizationReady: true,
   lexicalReady: true,
+  blobReady: true,
   producerStatus: "ready",
   semanticState: "ready",
   allowLexicalOnly: false
 };
 
+export const workshopStatus: WorkshopStatusOutput = {
+  installationId: expectedStatus.installationId,
+  baseIri: expectedStatus.baseIri,
+  principalId: "codex-assistant",
+  credentialId: "credential-test",
+  activeWorkspaceId: "primary",
+  workspaceIds: ["primary"],
+  capabilities: ["gnolith:use"],
+  authorizationRevision: 1,
+  migrationReadiness: { namespace: "@gnolith/workshop", version: 1, ready: true },
+  compatibility: { diamond: true, taproot: true },
+  canonicalReady: true,
+  authorizationReady: true,
+  lexicalReady: true,
+  semanticState: { state: "ready", configured: true },
+  producers: { ready: true, fingerprint: "producer-fingerprint", kinds: ["task", "memory", "prompt"] },
+  blobReady: true,
+  versions: { server: "0.1.0", operationSchema: 1 },
+  operationCatalogDigest: "a".repeat(64)
+};
+
 export class MockWorkshop implements WorkshopTransport {
   constructor(
-    private readonly status = expectedStatus,
+    private readonly status = workshopStatus,
     private readonly identity = "gnolith",
     private readonly tools = ["gnolith_status", "gnolith_read"]
   ) {}
@@ -75,7 +98,11 @@ export class MockSeedbed implements SeedbedControl {
       digest: sha256(canonicalJson(request)),
       version: "0.1.0",
       request,
-      steps: ["fixed Seedbed assembly"]
+      steps: ["fixed Seedbed assembly"],
+      stateRoot: {
+        kind: "external-directory",
+        canonicalPath: join(this.tokenPath, "..", "seedbed-state")
+      }
     };
   }
   async apply(plan: InstallationPlan): Promise<InstallationReceipt> {

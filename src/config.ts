@@ -1,5 +1,5 @@
 import { constants } from "node:fs";
-import { access, lstat, mkdir, open, readFile, rename, rm } from "node:fs/promises";
+import { access, lstat, mkdir, open, readFile, realpath, rename, rm } from "node:fs/promises";
 import { dirname } from "node:path";
 import { randomUUID } from "node:crypto";
 import { sha256 } from "./canonical.js";
@@ -141,6 +141,11 @@ export async function atomicConfigWrite(input: {
   const before = await inspectConfig(input.path);
   invariant(before.digest === input.expectedDigest, "config-changed", "Codex config changed after planning");
   await mkdir(dirname(input.path), { recursive: true, mode: 0o700 });
+  invariant(
+    await realpath(dirname(input.path)) === dirname(input.path),
+    "config-parent-link",
+    "Codex config directory changed to an alias"
+  );
   const temp = `${input.path}.alembic-${randomUUID()}.tmp`;
   let handle;
   try {
@@ -151,6 +156,11 @@ export async function atomicConfigWrite(input: {
     handle = undefined;
     const recheck = await inspectConfig(input.path);
     invariant(recheck.digest === input.expectedDigest, "config-changed", "Codex config changed during apply");
+    invariant(
+      await realpath(dirname(input.path)) === dirname(input.path),
+      "config-parent-link",
+      "Codex config directory changed during apply"
+    );
     await rename(temp, input.path);
     await access(input.path, constants.R_OK);
     return sha256(await readFile(input.path));

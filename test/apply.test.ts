@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { join } from "node:path";
 import { readFile } from "node:fs/promises";
 import { applyPlan, canonicalJson, createPlan, inspectConfig, resumeOperation, sha256, verifyPlan } from "../src/index.js";
-import { MockSeedbed, MockWorkshop, expectedStatus, protectedToken, temporaryProject } from "./helpers.js";
+import { MockSeedbed, MockWorkshop, expectedStatus, protectedToken, temporaryProject, workshopStatus } from "./helpers.js";
 
 test("Docker-local apply invokes Seedbed, verifies protocol, writes config last, and requires new task", async () => {
   const root = await temporaryProject();
@@ -286,11 +286,11 @@ test("wrong identity, shallow catalog, and degraded semantics cannot verify", as
     protectedFile: { kind: "protected-file" as const, canonicalPath: protectedCredential.path, credentialId: "test", sha256: protectedCredential.digest }
   };
   const { verifyWorkshop } = await import("../src/workshop.js");
-  await assert.rejects(verifyWorkshop({ ...common, transport: new MockWorkshop(expectedStatus, "not-gnolith") }), /identity/u);
-  await assert.rejects(verifyWorkshop({ ...common, transport: new MockWorkshop(expectedStatus, "gnolith", ["health"]) }), /gnolith_status/u);
+  await assert.rejects(verifyWorkshop({ ...common, transport: new MockWorkshop(workshopStatus, "not-gnolith") }), /identity/u);
+  await assert.rejects(verifyWorkshop({ ...common, transport: new MockWorkshop(workshopStatus, "gnolith", ["health"]) }), /gnolith_status/u);
   await assert.rejects(verifyWorkshop({
     ...common,
     expected: { ...expectedStatus, semanticState: "degraded", allowLexicalOnly: false },
-    transport: new MockWorkshop({ ...expectedStatus, semanticState: "degraded" })
+    transport: new MockWorkshop({ ...workshopStatus, semanticState: { state: "degraded", configured: true } })
   }), /Semantic degradation/u);
 });

@@ -45,6 +45,7 @@ export const TOOL_CATALOG: readonly ToolDefinition[] = [
   definition("alembic_diagnose", "Run bounded redacted project/connection diagnosis.", {
     ...scope,
     installationId: { type: "string", maxLength: 256 },
+    seedbedStateRoot: { type: "string", description: "Explicitly approved external Seedbed-owned state root" },
     operationId: identifier("Operation ID for identity and activation comparison")
   }, ["taskDirectory"], true, false, false, true),
   definition("alembic_legacy_inspect", "Validate an exact Setup 0.2.0 structural handoff bundle.", {
