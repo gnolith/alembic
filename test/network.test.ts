@@ -21,13 +21,14 @@ test("protocol transport refuses redirects, response bombs, and stalled requests
   assert.notEqual(address, null);
   assert.equal(typeof address, "object");
   const endpoint = new URL(`http://127.0.0.1:${(address as { port: number }).port}/mcp`);
-  const transport = new FetchWorkshopTransport(40, 1024);
+  const transport = new FetchWorkshopTransport(1000, 1024);
   try {
     await assert.rejects(transport.call(endpoint, "selector-token", "initialize", {}), /fetch|redirect/iu);
     behavior = "bomb";
     await assert.rejects(transport.call(endpoint, "selector-token", "initialize", {}), /response exceeds/iu);
     behavior = "stall";
-    await assert.rejects(transport.call(endpoint, "selector-token", "initialize", {}), /abort|fetch/iu);
+    const timeoutTransport = new FetchWorkshopTransport(40, 1024);
+    await assert.rejects(timeoutTransport.call(endpoint, "selector-token", "initialize", {}), /abort|fetch/iu);
   } finally {
     server.closeAllConnections();
     await new Promise<void>((resolve) => server.close(() => resolve()));
