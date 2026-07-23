@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://gnolith.dev/schemas/alembic/operation-v1.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["format", "operationId", "planId", "planDigest", "state", "startedAt", "updatedAt", "checkpoints", "projectRoot", "configBeforeDigest", "configAfterDigest", "endpoint", "authentication", "seedbed", "verificationDigest", "previousReceipt", "message"],
+  "properties": {
+    "format": { "const": "gnolith-alembic-operation-v1" },
+    "operationId": { "type": "string" },
+    "planId": { "type": "string" },
+    "planDigest": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "state": { "enum": ["planned", "applying", "activation-prerequisite", "activation-required", "failed"] },
+    "startedAt": { "type": "string", "format": "date-time" },
+    "updatedAt": { "type": "string", "format": "date-time" },
+    "checkpoints": { "type": "array", "items": { "type": "object" } },
+    "projectRoot": { "type": "string" },
+    "configBeforeDigest": { "type": ["string", "null"] },
+    "configAfterDigest": { "type": ["string", "null"] },
+    "endpoint": { "type": "string", "pattern": "/mcp$" },
+    "authentication": { "enum": ["local-bearer-v1", "remote-oauth-v1"] },
+    "seedbed": { "type": ["object", "null"] },
+    "verificationDigest": { "type": ["string", "null"] },
+    "previousReceipt": { "type": ["string", "null"] },
+    "message": { "type": "string" }
+  }
+}

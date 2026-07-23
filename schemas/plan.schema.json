@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://gnolith.dev/schemas/alembic/plan-v1.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["format", "planId", "operationId", "createdAt", "expiresAt", "requestDigest", "project", "action", "mode", "endpoint", "authentication", "expected", "seedbedPlan", "seedbedPlanDigest", "compatibility", "approvedSteps", "digest"],
+  "properties": {
+    "format": { "const": "gnolith-alembic-plan-v1" },
+    "planId": { "type": "string", "pattern": "^plan_[0-9a-f-]{36}$" },
+    "operationId": { "type": "string", "pattern": "^op_[0-9a-f-]{36}$" },
+    "createdAt": { "type": "string", "format": "date-time" },
+    "expiresAt": { "type": "string", "format": "date-time" },
+    "requestDigest": { "$ref": "#/$defs/digest" },
+    "project": { "type": "object" },
+    "action": { "enum": ["create", "connect", "repair", "rebind", "remove", "adopt"] },
+    "mode": { "enum": ["docker-local", "remote"] },
+    "endpoint": { "type": "string", "format": "uri", "pattern": "/mcp$" },
+    "authentication": { "oneOf": [{ "$ref": "#/$defs/environment" }, { "$ref": "#/$defs/oauth" }] },
+    "expected": { "type": "object" },
+    "seedbedPlan": { "type": ["object", "null"] },
+    "seedbedPlanDigest": { "oneOf": [{ "$ref": "#/$defs/digest" }, { "type": "null" }] },
+    "compatibility": { "type": "object" },
+    "approvedSteps": { "type": "array", "items": { "type": "string" } },
+    "digest": { "$ref": "#/$defs/digest" }
+  },
+  "$defs": {
+    "digest": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "environment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "variable"],
+      "properties": { "kind": { "const": "environment" }, "variable": { "const": "GNOLITH_BEARER_TOKEN" } }
+    },
+    "oauth": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "profile", "issuer", "audience", "scopes"],
+      "properties": {
+        "kind": { "const": "host-oauth" },
+        "profile": { "const": "remote-oauth-v1" },
+        "issuer": { "type": "string", "format": "uri" },
+        "audience": { "type": "string" },
+        "scopes": { "type": "array", "items": { "type": "string" }, "uniqueItems": true }
+      }
+    }
+  }
+}

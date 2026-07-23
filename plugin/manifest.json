@@ -1,0 +1,30 @@
+{
+  "$schema": "./schema.json",
+  "id": "alembic",
+  "name": "Alembic",
+  "version": "0.1.0",
+  "description": "Gnolith setup and diagnostics control plane; never a data-plane proxy",
+  "license": "MIT",
+  "mcpServers": {
+    "alembic": {
+      "command": "node",
+      "args": [
+        "${pluginRoot}/dist/mcp.js"
+      ],
+      "cwd": "${projectRoot}",
+      "transport": "stdio"
+    }
+  },
+  "skills": [
+    "${pluginRoot}/skills/alembic/SKILL.md"
+  ],
+  "capabilities": {
+    "network": true,
+    "projectFiles": [
+      ".codex/config.toml",
+      ".codex/alembic/**"
+    ],
+    "secrets": false,
+    "hostOAuth": true
+  }
+}

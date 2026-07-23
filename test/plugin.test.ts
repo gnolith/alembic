@@ -1,0 +1,46 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
+import { spawn } from "node:child_process";
+
+const root = process.cwd();
+
+test("plugin manifest identifies Alembic only and uses bounded stdio control plane", async () => {
+  const manifest = JSON.parse(await readFile(join(root, "plugin", "manifest.json"), "utf8")) as {
+    id: string;
+    mcpServers: Record<string, unknown>;
+    capabilities: { secrets: boolean };
+  };
+  assert.equal(manifest.id, "alembic");
+  assert.deepEqual(Object.keys(manifest.mcpServers), ["alembic"]);
+  assert.equal(manifest.capabilities.secrets, false);
+});
+
+test("installed MCP initializes as Alembic and lists the exact fixed catalog", async () => {
+  const child = spawn(process.execPath, [join(root, "dist-test", "src", "mcp.js")], {
+    stdio: ["pipe", "pipe", "pipe"]
+  });
+  const lines: string[] = [];
+  child.stdout.setEncoding("utf8");
+  child.stdout.on("data", (chunk: string) => lines.push(...chunk.trim().split("\n")));
+  child.stdin.write(JSON.stringify({ jsonrpc: "2.0", id: 1, method: "initialize", params: {} }) + "\n");
+  child.stdin.write(JSON.stringify({ jsonrpc: "2.0", id: 2, method: "tools/list", params: {} }) + "\n");
+  await new Promise((resolve) => setTimeout(resolve, 200));
+  child.kill();
+  assert.equal(lines.length >= 2, true);
+  const initialized = JSON.parse(lines[0]!) as { result: { serverInfo: { name: string }; instructions: string } };
+  assert.equal(initialized.result.serverInfo.name, "alembic");
+  assert.match(initialized.result.instructions, /never a proxy/u);
+  const listed = JSON.parse(lines[1]!) as { result: { tools: { name: string }[] } };
+  assert.equal(listed.result.tools.length, 9);
+  assert.equal(listed.result.tools.some(({ name }) => name.startsWith("gnolith_")), false);
+});
+
+test("plugin installation semantics are project-local and activation requires a new task", async () => {
+  const skill = await readFile(join(root, "skills", "alembic", "SKILL.md"), "utf8");
+  assert.match(skill, /exact absolute current task directory/u);
+  assert.match(skill, /Start one new Codex task in this same project/u);
+  assert.match(skill, /use Gnolith directly/u);
+  assert.match(skill, /Never claim live injection/u);
+});

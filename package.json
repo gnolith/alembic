@@ -1,0 +1,69 @@
+{
+  "name": "@gnolith/alembic",
+  "version": "0.1.0",
+  "description": "Codex setup and diagnostics control plane for Gnolith",
+  "license": "MIT",
+  "type": "module",
+  "private": false,
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "bin": {
+    "gnolith-alembic": "./dist/mcp.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "schemas",
+    "plugin",
+    "skills",
+    "README.md",
+    "LICENSE",
+    "SECURITY.md",
+    "SUPPORT.md",
+    "CHANGELOG.md"
+  ],
+  "scripts": {
+    "clean": "node scripts/clean.mjs",
+    "build": "tsc -p tsconfig.json",
+    "lint": "eslint .",
+    "build:test": "tsc -p tsconfig.test.json",
+    "test": "npm run build:test && node --test --test-reporter=spec dist-test/test/core.test.js dist-test/test/apply.test.js dist-test/test/legacy.test.js",
+    "test:security": "npm run build:test && node --test --test-reporter=spec dist-test/test/security-gates.test.js",
+    "test:plugin": "npm run build:test && node --test --test-reporter=spec dist-test/test/plugin.test.js",
+    "gate": "npm run clean && npm ci && npm run lint && npm test && npm run test:security && npm run test:plugin && npm run build && npm audit --omit=dev --audit-level=high && npm pack --dry-run",
+    "candidate": "node scripts/candidate.mjs"
+  },
+  "devDependencies": {
+    "@eslint/js": "9.39.2",
+    "@types/node": "24.10.4",
+    "eslint": "9.39.2",
+    "typescript": "5.9.3",
+    "typescript-eslint": "8.51.0"
+  },
+  "peerDependencies": {
+    "@gnolith/seedbed": "0.1.0",
+    "@gnolith/workshop": "0.1.0"
+  },
+  "peerDependenciesMeta": {
+    "@gnolith/seedbed": {
+      "optional": true
+    },
+    "@gnolith/workshop": {
+      "optional": true
+    }
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/gnolith/alembic.git"
+  },
+  "bugs": {
+    "url": "https://github.com/gnolith/alembic/issues"
+  },
+  "homepage": "https://github.com/gnolith/alembic#readme"
+}

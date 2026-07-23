@@ -1,0 +1,7 @@
+node_modules/
+dist/
+dist-test/
+artifacts/
+*.tgz
+*.log
+.DS_Store

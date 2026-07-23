@@ -1,0 +1,42 @@
+# Alembic
+
+Alembic is the Codex setup and diagnostics control plane for Gnolith. It is
+never the Gnolith data plane or a proxy. After activation, ordinary work uses
+Workshop directly through the project-scoped `gnolith` MCP connection.
+
+It exposes only nine bounded operations: inspect, discover, plan, apply,
+operation read, operation resume, diagnose, legacy inspect, and legacy adopt.
+Docker-local provisioning is delegated to Seedbed's stable typed contract.
+Remote services are connect-existing only.
+
+## Safety model
+
+- Plans bind the canonical project, config digest, endpoint, auth selector,
+  expected identity, compatibility coordinates, expiry, and operation ID.
+- Credential selectors—not credential values—are accepted or stored.
+- Workshop verification performs authenticated MCP initialization, catalog
+  inspection, and `gnolith_status` comparison before config mutation.
+- Alembic owns one exact marked URL block and refuses user-owned Gnolith tables.
+- Apply is checkpointed, idempotent, resumable, and writes config last.
+- Success is `activation-required`: start a new Codex task in the same project.
+
+See [THREAT_MODEL.md](THREAT_MODEL.md), [COMPATIBILITY.md](COMPATIBILITY.md),
+and [SECURITY.md](SECURITY.md).
+
+## Development
+
+Requires Node.js 22 or newer.
+
+```text
+npm ci
+npm run gate
+npm run candidate
+```
+
+`candidate` creates an unpublished package archive, CycloneDX SBOM, inventory,
+and lowercase SHA-256 checksums. It never tags, releases, or publishes.
+
+Uninstalling or disabling the Alembic plugin does not remove project config,
+installations, volumes, backups, protected credentials, operation receipts, or
+remote resources. Explicit removal is a separate approved plan and removes
+only Alembic's marked project-config block.
