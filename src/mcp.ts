@@ -49,6 +49,12 @@ async function handle(request: JsonRpcRequest): Promise<unknown> {
   const name = request.params?.name;
   const args = request.params?.arguments ?? {};
   invariant(TOOL_CATALOG.some((tool) => tool.name === name), "tool-not-found", "Unknown Alembic control-plane tool");
+  const definition = TOOL_CATALOG.find((tool) => tool.name === name);
+  invariant(
+    definition !== undefined && Object.keys(args).every((key) => key in definition.inputSchema.properties),
+    "unapproved-input",
+    "Tool input contains an unapproved field"
+  );
   switch (name) {
     case "alembic_inspect":
       return content(await control.inspect(args as Parameters<typeof control.inspect>[0]));

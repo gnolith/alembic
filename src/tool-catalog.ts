@@ -44,7 +44,8 @@ export const TOOL_CATALOG: readonly ToolDefinition[] = [
   }, ["taskDirectory", "operationId"], false, true, true, true),
   definition("alembic_diagnose", "Run bounded redacted project/connection diagnosis.", {
     ...scope,
-    installationId: { type: "string", maxLength: 256 }
+    installationId: { type: "string", maxLength: 256 },
+    operationId: identifier("Operation ID for identity and activation comparison")
   }, ["taskDirectory"], true, false, false, true),
   definition("alembic_legacy_inspect", "Validate an exact Setup 0.2.0 structural handoff bundle.", {
     bundlePath: { type: "string" },

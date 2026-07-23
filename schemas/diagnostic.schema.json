@@ -3,9 +3,10 @@
   "$id": "https://gnolith.dev/schemas/alembic/diagnostic-v1.json",
   "type": "object",
   "additionalProperties": false,
-  "required": ["format", "classification", "projectRoot", "managedState", "expectedIdentity", "observedIdentity", "activationPending", "repair"],
+  "required": ["format", "purpose", "classification", "projectRoot", "managedState", "expectedIdentity", "observedIdentity", "activationPending", "repair", "seedbed", "forbidden"],
   "properties": {
     "format": { "const": "gnolith-alembic-diagnostic-v1" },
+    "purpose": { "const": "bounded-redacted-diagnosis" },
     "classification": {
       "enum": ["ready", "activation-pending", "config-conflict", "scope-denied", "network", "tls", "authentication", "identity", "catalog", "readiness", "seedbed", "unknown"]
     },
@@ -14,6 +15,8 @@
     "expectedIdentity": { "type": ["object", "null"] },
     "observedIdentity": { "type": ["object", "null"] },
     "activationPending": { "type": "boolean" },
-    "repair": { "enum": ["none", "resume-exact-operation", "restart-recorded-components", "new-approved-plan"] }
+    "repair": { "enum": ["none", "resume-exact-operation", "restart-recorded-components", "new-approved-plan"] },
+    "seedbed": { "type": ["object", "null"] },
+    "forbidden": { "type": "array", "items": { "type": "string" } }
   }
 }

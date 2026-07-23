@@ -104,8 +104,22 @@ export class AlembicControlPlane {
     confirmedProjectRoot?: string;
     hostMetadata?: HostMetadataV1;
     installationId?: string;
+    operationId?: string;
   }) {
     const inspection = await this.inspect(input);
+    let operation = null;
+    let expectedIdentity = null;
+    if (input.operationId) {
+      operation = await new OperationStore(inspection.project.root).readReceipt(input.operationId);
+      const plan = await new OperationStore(inspection.project.root).readPlan(operation.planId);
+      expectedIdentity = {
+        installationId: plan.expected.installationId,
+        baseIri: plan.expected.baseIri,
+        catalogDigest: plan.expected.catalogDigest,
+        serverVersion: plan.expected.serverVersion,
+        operationVersion: plan.expected.operationVersion
+      };
+    }
     let seedbed = null;
     if (input.installationId && this.dependencies.seedbed) {
       seedbed = await this.dependencies.seedbed.diagnose({
@@ -114,8 +128,31 @@ export class AlembicControlPlane {
       });
     }
     return {
+      format: "gnolith-alembic-diagnostic-v1",
       purpose: "bounded-redacted-diagnosis",
-      inspection,
+      classification:
+        inspection.conflict
+          ? "config-conflict"
+          : operation?.state === "activation-required" || operation?.state === "activation-prerequisite"
+            ? "activation-pending"
+            : inspection.configured
+              ? "ready"
+              : "unknown",
+      projectRoot: inspection.project.root,
+      managedState: inspection.managedState,
+      expectedIdentity,
+      observedIdentity:
+        operation?.verificationDigest
+          ? { verificationDigest: operation.verificationDigest, verifiedBeforeConfigWrite: true }
+          : null,
+      activationPending:
+        operation?.state === "activation-required" || operation?.state === "activation-prerequisite",
+      repair:
+        operation?.state === "failed" || operation?.state === "activation-prerequisite"
+          ? "resume-exact-operation"
+          : seedbed?.restartAllowed === true
+            ? "restart-recorded-components"
+            : "none",
       seedbed: seedbed
         ? {
             installationId: seedbed.installationId,
@@ -123,7 +160,6 @@ export class AlembicControlPlane {
             restartAllowed: seedbed.restartAllowed
           }
         : null,
-      allowedRepair: seedbed?.restartAllowed === true ? "resume-or-restart-recorded-components" : "none",
       forbidden: [
         "migration",
         "restore",

@@ -120,6 +120,23 @@ export async function applyPlan(
       );
       invariant(seedbedReceipt.endpoint === plan.endpoint, "seedbed-endpoint-changed", "Seedbed receipt endpoint changed");
       invariant(seedbedReceipt.installationId === plan.expected.installationId, "seedbed-identity-changed", "Seedbed identity changed");
+      invariant(seedbedReceipt.baseIri === plan.expected.baseIri, "seedbed-base-iri-changed", "Seedbed base IRI changed");
+      invariant(
+        canonicalJson(seedbedReceipt.expected) === canonicalJson(plan.expected),
+        "seedbed-readiness-changed",
+        "Seedbed expected Workshop evidence changed"
+      );
+      invariant(
+        seedbedReceipt.environmentSelector === "GNOLITH_BEARER_TOKEN",
+        "seedbed-environment-selector",
+        "Seedbed credential environment selector is incompatible"
+      );
+      invariant(
+        seedbedReceipt.protectedTokenFile.credentialId.length > 0 &&
+          /^[0-9a-f]{64}$/u.test(seedbedReceipt.protectedTokenFile.sha256),
+        "seedbed-credential-selector",
+        "Seedbed protected credential selector is invalid"
+      );
       receipt = {
         ...receipt,
         seedbed: {

@@ -23,10 +23,13 @@
     "plugin",
     "skills",
     "README.md",
+    "ACCEPTANCE.md",
     "LICENSE",
     "SECURITY.md",
     "SUPPORT.md",
-    "CHANGELOG.md"
+    "CHANGELOG.md",
+    "COMPATIBILITY.md",
+    "THREAT_MODEL.md"
   ],
   "scripts": {
     "clean": "node scripts/clean.mjs",

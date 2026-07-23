@@ -152,6 +152,23 @@ test("expired or modified plans fail before external mutation", async () => {
   assert.equal(oldDigest, plan.digest);
   const expired = { ...unsigned, digest: sha256(canonicalJson(unsigned)) };
   assert.throws(() => verifyPlan(expired), /expired/u);
+  await assert.rejects(
+    createPlan({
+      taskDirectory: root,
+      confirmedProjectRoot: root,
+      action: "create",
+      mode: "docker-local",
+      endpoint: docker.endpoint,
+      authentication: {
+        kind: "environment",
+        variable: "GNOLITH_BEARER_TOKEN",
+        token: "SECRET_CANARY_REJECTED"
+      },
+      expected: expectedStatus,
+      docker
+    } as unknown as Parameters<typeof createPlan>[0], seedbed),
+    /unapproved field/u
+  );
   assert.equal(seedbed.applied, 0);
 });
 
