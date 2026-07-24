@@ -7,7 +7,8 @@ import { fileURLToPath } from "node:url";
 import { gunzipSync } from "node:zlib";
 
 const exec = promisify(execFile);
-const npmCommand = process.platform === "win32" ? "npm.cmd" : "npm";
+const npmCommand = process.env.npm_execpath ? process.execPath : "npm";
+const npmPrefix = process.env.npm_execpath ? [process.env.npm_execpath] : [];
 const root = new URL("../", import.meta.url);
 const artifacts = new URL("../artifacts/", import.meta.url);
 const lock = JSON.parse(await readFile(new URL("../candidate-lock.json", import.meta.url)));
@@ -25,15 +26,15 @@ const coordinates = {
 const { stdout: commit } = await exec("git", ["rev-parse", "HEAD"], { cwd: root });
 const { stdout: status } = await exec("git", ["status", "--porcelain", "--untracked-files=all"], { cwd: root });
 if (status.trim()) throw new Error("Candidate requires a clean committed worktree");
-await exec(npmCommand, ["run", "gate"], { cwd: root });
+await exec(npmCommand, [...npmPrefix, "run", "gate"], { cwd: root });
 await mkdir(artifacts, { recursive: true });
-const { stdout: packOutput } = await exec(npmCommand, ["pack", "--json", "--pack-destination", "artifacts"], { cwd: root });
+const { stdout: packOutput } = await exec(npmCommand, [...npmPrefix, "pack", "--json", "--pack-destination", "artifacts"], { cwd: root });
 const packed = JSON.parse(packOutput);
 if (!Array.isArray(packed) || packed.length !== 1) throw new Error("Unexpected npm pack result");
 const archiveName = packed[0].filename;
 const archivePath = join(fileURLToPath(artifacts), archiveName);
 const archiveDigest = digest(await readFile(archivePath));
-const { stdout: sbom } = await exec(npmCommand, ["sbom", "--sbom-format", "cyclonedx"], { cwd: root, maxBuffer: 20 * 1024 * 1024 });
+const { stdout: sbom } = await exec(npmCommand, [...npmPrefix, "sbom", "--sbom-format", "cyclonedx"], { cwd: root, maxBuffer: 20 * 1024 * 1024 });
 const sbomPath = new URL("../artifacts/alembic-0.1.0.cdx.json", import.meta.url);
 await writeFile(sbomPath, sbom);
 const sbomDigest = digest(await readFile(sbomPath));
