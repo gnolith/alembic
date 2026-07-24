@@ -111,12 +111,12 @@ try {
     name: "Packed Semantic",
     provider: {
       kind: "openai-compatible",
-      endpoint: "https://api.example.test/v1",
+      endpoint: "http://127.0.0.1:43118/mock",
       model: "text-embedding-model",
       dimensions: 1536,
       metric: "cosine",
       credentialSelector: "packed-openai-key",
-      allowPrivateEndpoint: false,
+      allowPrivateEndpoint: true,
       redirectPolicy: "error"
     },
     vector: { kind: "sqlite" }
@@ -180,21 +180,28 @@ try {
     waystone: plan.waystone
   });
   let seedbedResumeCalls = 0;
+  let approvedSeedbedPlan = seedbedPlan;
   const seedbed = {
     inspect: (selector) => exactSeedbed.inspect(selector),
-    plan: (request) => exactSeedbed.plan(request),
-    apply: async (approvedPlan) => packedSeedbedReceipt(approvedPlan),
+    plan: async (request) => {
+      approvedSeedbedPlan = await exactSeedbed.plan(request);
+      return approvedSeedbedPlan;
+    },
+    apply: async (approvedPlan) => {
+      approvedSeedbedPlan = approvedPlan;
+      return packedSeedbedReceipt(approvedPlan);
+    },
     resume: async (operationId) => {
-      assert.equal(operationId, seedbedPlan.id);
+      assert.equal(operationId, approvedSeedbedPlan.id);
       seedbedResumeCalls += 1;
-      return packedSeedbedReceipt(seedbedPlan);
+      return packedSeedbedReceipt(approvedSeedbedPlan);
     },
     diagnose: async (selector) => ({
       installationId: selector.installationId,
       classification: "local-workshop-unavailable",
       repair: {
         kind: "seedbed-resume-operation-v1",
-        operationId: seedbedPlan.id,
+        operationId: approvedSeedbedPlan.id,
         action: "restart-recorded-compose"
       }
     })
@@ -209,7 +216,14 @@ try {
     expected,
     docker
   }, seedbed);
-  assert.deepEqual(plan.seedbedPlan.request, seedbedPlan.request);
+  assert.deepEqual(plan.seedbedPlan.request, {
+    ...seedbedPlan.request,
+    baseIri: "https://example.test/packed",
+    expected: {
+      ...seedbedPlan.request.expected,
+      baseIri: "https://example.test/packed"
+    }
+  });
   assert.equal(plan.seedbedLocalBuildTrust.seedbedCandidateSha256, "5d62c83953bfb1a6a96294fe849a38187b723c1183334bf676f04192aa28f9ef");
   assert.equal(plan.semanticProfile.fingerprint, semanticFingerprint);
   assert.equal(plan.semanticProfile.revision, 1);
@@ -293,7 +307,7 @@ try {
     authentication: { kind: "environment", variable: "GNOLITH_BEARER_TOKEN" },
     expected,
     semanticProfile: plan.semanticProfile,
-    protectedFile: packedSeedbedReceipt(seedbedPlan).protectedTokenFile
+    protectedFile: packedSeedbedReceipt(approvedSeedbedPlan).protectedTokenFile
   };
   for (const semanticState of [
     { ...workshopStatus.semanticState, fingerprint: "0".repeat(64) },
@@ -325,7 +339,7 @@ try {
       return true;
     }
   );
-  assert.equal(seedbedResumeCalls, 1);
+  assert.equal(seedbedResumeCalls, 2);
   const stoppedDiagnosis = await new alembic.AlembicControlPlane({ seedbed }).diagnose({
     taskDirectory: projectRoot,
     confirmedProjectRoot: projectRoot,
@@ -340,7 +354,7 @@ try {
   });
   assert.equal(repaired.state, "activation-required");
   assert.equal(repaired.failureClassification, "none");
-  assert.equal(seedbedResumeCalls, 2);
+  assert.equal(seedbedResumeCalls, 3);
   assert.equal(fetchCalls, 0);
 
   await assert.rejects(
