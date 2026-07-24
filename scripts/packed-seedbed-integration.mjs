@@ -94,7 +94,7 @@ try {
     installationId: "packed-integration",
     baseIri: "https://example.test/packed/",
     serverVersion: "0.5.0",
-    operationVersion: "11",
+    operationVersion: "2",
     catalogDigest: "7a66ccb7ed6c5ae33be526a318376b895d2ecb122d7e723fb3117baf8ad66224",
     migrationReady: true,
     canonicalReady: true,
@@ -105,6 +105,7 @@ try {
     semanticState: "ready",
     allowLexicalOnly: false
   };
+  const seedbedExpected = { ...expected, operationVersion: "11" };
   const semanticConfiguration = {
     version: 1,
     id: "packed-semantic",
@@ -151,7 +152,10 @@ try {
     throw new Error("Packed integration forbids network access");
   };
   process.env.PATH = emptyPath;
-  const seedbedPlan = await exactSeedbed.plan(docker);
+  const seedbedPlan = await exactSeedbed.plan({
+    ...docker,
+    expected: seedbedExpected
+  });
   assert.equal(seedbedPlan.request.image.selector, "gnolith-seedbed-local-build-v1");
   assert.equal(seedbedPlan.request.image.pullPolicy, "never");
   assert.equal(

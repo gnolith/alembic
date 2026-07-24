@@ -45,5 +45,5 @@ try {
   channel.postMessage({ kind: "result", value });
 } catch (error) {
   const safe = publicError(error);
-  channel.postMessage({ kind: "error", code: safe.code, stage });
+  channel.postMessage({ kind: "error", code: safe.code, stage, details: safe.details });
 }

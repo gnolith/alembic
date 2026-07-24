@@ -17,7 +17,7 @@ const root = await mkdtemp(join(tmpdir(), "alembic-packed-mcp-"));
 const projectRoot = join(root, "project");
 const stateRoot = join(root, "seedbed-state");
 await Promise.all([
-  mkdir(join(projectRoot, ".codex"), { recursive: true }),
+  mkdir(projectRoot, { recursive: true }),
   mkdir(stateRoot, { recursive: true })
 ]);
 
@@ -41,33 +41,8 @@ try {
   const api = await import(pathToFileURL(join(alembicRoot, "dist", "index.js")).href);
   const configPath = join(projectRoot, ".codex", "config.toml");
   const config = "[mcp_servers.other]\nurl = \"https://other.example/mcp\"\n";
-  await writeFile(configPath, config);
-  const unsignedLegacy = {
-    format: "gnolith-setup-to-alembic-v1",
-    schemaVersion: 1,
-    projectRoot,
-    configDigest: api.sha256(config),
-    legacyMarkerDigest: null,
-    marker: {
-      begin: "# BEGIN ALEMBIC MANAGED GNOLITH MCP",
-      end: "# END ALEMBIC MANAGED GNOLITH MCP",
-      state: "absent"
-    },
-    connection: {
-      mode: "remote-http",
-      endpoint: "https://example.com/mcp",
-      authentication: { kind: "oauth" }
-    },
-    receipts: []
-  };
   const validLegacyPath = join(projectRoot, "valid-legacy.json");
-  await writeFile(validLegacyPath, JSON.stringify({
-    ...unsignedLegacy,
-    sha256: api.sha256(api.canonicalJson(unsignedLegacy))
-  }));
   const invalidLegacyPath = join(projectRoot, "invalid-legacy.snapshot");
-  if (legacyFixture) await copyFile(legacyFixture, invalidLegacyPath);
-  else await writeFile(invalidLegacyPath, new Uint8Array([0x1f, 0x8b, 0x08, 0x00]));
 
   child = spawn(process.execPath, [
     join(alembicRoot, "dist", "mcp.js")
@@ -75,7 +50,7 @@ try {
     cwd: projectRoot,
     env: {
       ...process.env,
-      GNOLITH_BEARER_TOKEN: "packed_blackbox_token"
+      GNOLITH_BEARER_TOKEN: undefined
     },
     stdio: ["pipe", "pipe", "pipe"],
     windowsHide: true
@@ -93,10 +68,10 @@ try {
   assert.equal(inspected.purpose, "setup-and-diagnostics-only");
 
   const expected = {
-    installationId: "packed-blackbox",
-    baseIri: "https://packed.invalid/base/",
+    installationId: "final2-9d61c3",
+    baseIri: "https://acceptance.invalid/urban-birdwatching/",
     serverVersion: "0.5.0",
-    operationVersion: "11",
+    operationVersion: "2",
     catalogDigest: "7a66ccb7ed6c5ae33be526a318376b895d2ecb122d7e723fb3117baf8ad66224",
     migrationReady: true,
     canonicalReady: true,
@@ -110,7 +85,7 @@ try {
   const docker = {
     installationId: expected.installationId,
     baseIri: expected.baseIri,
-    endpoint: "http://127.0.0.1:4317/mcp",
+    endpoint: "http://127.0.0.1:45411/mcp",
     image: {
       kind: "seedbed-local-build-v1",
       selector: "gnolith-seedbed-local-build-v1",
@@ -130,32 +105,41 @@ try {
     authentication: { kind: "environment", variable: "GNOLITH_BEARER_TOKEN" },
     acceptLexicalOnly: true,
     expected,
-    docker,
-    seedbedStateRoot: stateRoot
+    docker
   };
-  const slashPlan = await rpc.tool("alembic_plan", { request }, 20_000);
-  assert.equal(slashPlan.expected.baseIri, "https://packed.invalid/base");
+  const defaultStatePlan = await rpc.tool("alembic_plan", { request }, 20_000);
+  assert.equal(defaultStatePlan.expected.operationVersion, "2");
+  assert.equal(defaultStatePlan.seedbedPlan.request.expected.operationVersion, "11");
+  const slashPlan = await rpc.tool("alembic_plan", {
+    request: { ...request, seedbedStateRoot: stateRoot }
+  }, 20_000);
+  assert.equal(slashPlan.expected.baseIri, "https://acceptance.invalid/urban-birdwatching");
+  assert.equal(slashPlan.expected.operationVersion, "2");
+  assert.equal(slashPlan.seedbedPlan.request.expected.operationVersion, "11");
   const canonicalPlan = await rpc.tool("alembic_plan", {
     request: {
       ...request,
-      expected: { ...expected, baseIri: "https://packed.invalid/base" },
+      seedbedStateRoot: stateRoot,
+      expected: { ...expected, baseIri: "https://acceptance.invalid/urban-birdwatching" },
       docker: {
         ...docker,
-        baseIri: "https://packed.invalid/base",
-        expected: { ...expected, baseIri: "https://packed.invalid/base" }
+        baseIri: "https://acceptance.invalid/urban-birdwatching",
+        expected: { ...expected, baseIri: "https://acceptance.invalid/urban-birdwatching" }
       }
     }
   }, 20_000);
   assert.equal(canonicalPlan.requestDigest, slashPlan.requestDigest);
-  assert.equal(slashPlan.endpoint, "http://127.0.0.1:4317/mcp");
+  assert.equal(slashPlan.endpoint, "http://127.0.0.1:45411/mcp");
   assert.doesNotMatch(JSON.stringify(slashPlan), /stdio|process-local/iu);
-  assert.equal(await readFile(configPath, "utf8"), config);
-  assert.equal((await readdir(join(projectRoot, ".codex", "alembic", "plans"))).length, 2);
+  await assert.rejects(readFile(configPath, "utf8"), /ENOENT/u);
+  assert.equal((await readdir(join(projectRoot, ".codex", "alembic", "plans"))).length, 3);
   const invalidStartedAt = Date.now();
-  await assert.rejects(
-    rpc.tool("alembic_plan", {
+  const invalid = await rpc.envelope("tools/call", {
+    name: "alembic_plan",
+    arguments: {
       request: {
         ...request,
+        seedbedStateRoot: stateRoot,
         acceptLexicalOnly: false,
         expected: { ...expected, allowLexicalOnly: false },
         docker: {
@@ -163,15 +147,45 @@ try {
           expected: { ...expected, allowLexicalOnly: false }
         }
       }
-    }, 5_000),
-    /operation.*plan.*stage.*plan-seedbed-control/u
-  );
+    }
+  }, 5_000, "invalid-final-prompt");
+  assert.equal(invalid.id, "invalid-final-prompt");
+  assert.equal(invalid.error?.data?.classification, "seedbed-control-rejected");
+  assert.equal(invalid.error?.data?.stage, "plan-seedbed-control");
+  assert.equal(invalid.error?.data?.seedbed?.upstream?.code, "seedbed-request-lexical-acceptance");
   assert.equal(Date.now() - invalidStartedAt < 5_000, true);
   const afterFailure = await rpc.tool("alembic_inspect", {
     taskDirectory: projectRoot,
     confirmedProjectRoot: projectRoot
   }, 3_000);
   assert.equal(afterFailure.purpose, "setup-and-diagnostics-only");
+
+  await mkdir(join(projectRoot, ".codex"), { recursive: true });
+  await writeFile(configPath, config);
+  const unsignedLegacy = {
+    format: "gnolith-setup-to-alembic-v1",
+    schemaVersion: 1,
+    projectRoot,
+    configDigest: api.sha256(config),
+    legacyMarkerDigest: null,
+    marker: {
+      begin: "# BEGIN ALEMBIC MANAGED GNOLITH MCP",
+      end: "# END ALEMBIC MANAGED GNOLITH MCP",
+      state: "absent"
+    },
+    connection: {
+      mode: "remote-http",
+      endpoint: "https://example.com/mcp",
+      authentication: { kind: "oauth" }
+    },
+    receipts: []
+  };
+  await writeFile(validLegacyPath, JSON.stringify({
+    ...unsignedLegacy,
+    sha256: api.sha256(api.canonicalJson(unsignedLegacy))
+  }));
+  if (legacyFixture) await copyFile(legacyFixture, invalidLegacyPath);
+  else await writeFile(invalidLegacyPath, new Uint8Array([0x1f, 0x8b, 0x08, 0x00]));
 
   const legacy = await rpc.tool("alembic_legacy_inspect", {
     bundlePath: validLegacyPath,
@@ -236,6 +250,10 @@ function jsonRpcClient(processHandle) {
       const waiting = pending.get(message.id);
       if (!waiting) continue;
       pending.delete(message.id);
+      if (waiting.envelope) {
+        waiting.resolve(message);
+        continue;
+      }
       if (message.error) waiting.reject(new Error(
         `${message.error.data?.classification ?? "rpc"}: ${message.error.message}; data=${JSON.stringify(message.error.data ?? {})}; stderr=${stderr}`
       ));
@@ -264,6 +282,23 @@ function jsonRpcClient(processHandle) {
   };
   return {
     call,
+    envelope(method, params, timeoutMs, id) {
+      return new Promise((resolve, reject) => {
+        const timer = setTimeout(() => {
+          pending.delete(id);
+          reject(new Error(`${method} exceeded ${timeoutMs}ms; stderr=${stderr}`));
+        }, timeoutMs);
+        pending.set(id, {
+          envelope: true,
+          resolve: (value) => {
+            clearTimeout(timer);
+            resolve(value);
+          },
+          reject
+        });
+        processHandle.stdin.write(`${JSON.stringify({ jsonrpc: "2.0", id, method, params })}\n`);
+      });
+    },
     async tool(name, args, timeoutMs) {
       const result = await call("tools/call", { name, arguments: args }, timeoutMs);
       if (result.isError) throw new Error(result.content?.[0]?.text ?? `${name} failed`);

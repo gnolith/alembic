@@ -21,6 +21,7 @@ import {
   canonicalBearerSecret
 } from "../src/index.js";
 import { runIsolatedTool } from "../src/tool-isolation.js";
+import { boundedSeedbedCall } from "../src/seedbed-call.js";
 import { temporaryProject } from "./helpers.js";
 
 test("fixed catalog contains only nine bounded Alembic operations", () => {
@@ -66,6 +67,28 @@ test("isolated MCP tools retain a hard deadline when a dependency blocks", async
     );
   }
   assert.equal(Date.now() - startedAt < 1_000, true);
+});
+
+test("SeedbedControl rejections retain only bounded code and phase evidence", async () => {
+  await assert.rejects(
+    boundedSeedbedCall("plan", 100, async () => {
+      throw new TypeError("Expected Workshop versions or catalog do not match immutable Seedbed policy");
+    }),
+    (error) => {
+      assert.equal((error as { code?: string }).code, "seedbed-control-rejected");
+      assert.deepEqual((error as { details?: unknown }).details, {
+        operation: "plan",
+        phase: "seedbed-plan",
+        upstream: {
+          code: "seedbed-request-compatibility",
+          phase: "plan"
+        },
+        retryable: false
+      });
+      assert.doesNotMatch(JSON.stringify(error), /versions or catalog/u);
+      return true;
+    }
+  );
 });
 
 test("runtime Workshop verification exactly matches the final public candidate lock", async () => {

@@ -24,7 +24,7 @@ export const expectedStatus: ExpectedWorkshopStatus = {
   installationId: "installation-test",
   baseIri: "https://example.test/base",
   serverVersion: "0.5.0",
-  operationVersion: "11",
+  operationVersion: "2",
   catalogDigest: WORKSHOP_CATALOG_DIGEST,
   migrationReady: true,
   canonicalReady: true,
@@ -106,12 +106,13 @@ export class MockWorkshop implements WorkshopTransport {
 export class MockSeedbed implements SeedbedControl {
   public applied = 0;
   public resumed = 0;
+  private approvedPlan: InstallationPlan | undefined;
   constructor(private readonly tokenPath: string, private readonly tokenDigest: string) {}
   async inspect() {
     return { found: true, installationId: expectedStatus.installationId, state: "ready" };
   }
   async plan(request: DockerInstallationRequest): Promise<InstallationPlan> {
-    return {
+    this.approvedPlan = {
       id: "seedbed-plan",
       digest: sha256(canonicalJson(request)),
       version: "gnolith-seedbed-control-plan-v2",
@@ -123,6 +124,7 @@ export class MockSeedbed implements SeedbedControl {
       },
       waystone: waystoneEvidence
     };
+    return this.approvedPlan;
   }
   async apply(plan: InstallationPlan): Promise<InstallationReceipt> {
     this.applied += 1;
@@ -130,14 +132,17 @@ export class MockSeedbed implements SeedbedControl {
   }
   async resume() {
     this.resumed += 1;
-    const request: DockerInstallationRequest = {
-      installationId: expectedStatus.installationId,
-      baseIri: expectedStatus.baseIri,
-      endpoint: "http://127.0.0.1/mcp",
-      image: localBuildSelection,
-      expected: expectedStatus
-    };
-    return this.receipt(await this.plan(request));
+    if (this.approvedPlan === undefined) {
+      await this.plan({
+        installationId: expectedStatus.installationId,
+        baseIri: expectedStatus.baseIri,
+        endpoint: "http://127.0.0.1/mcp",
+        image: localBuildSelection,
+        expected: { ...expectedStatus, operationVersion: "11" }
+      });
+    }
+    if (this.approvedPlan === undefined) throw new Error("Mock Seedbed plan creation failed");
+    return this.receipt(this.approvedPlan);
   }
   async diagnose() {
     return {

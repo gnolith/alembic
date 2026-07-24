@@ -51,9 +51,11 @@ export async function runIsolatedTool(
       if (message.kind === "error") {
         const code = typeof message.code === "string" ? boundedStage(message.code) : `${operation}-failed`;
         const errorStage = typeof message.stage === "string" ? boundedStage(message.stage) : stage;
+        const seedbed = safeSeedbedControlDetails(message.details);
         finish(() => reject(new AlembicError(code, `${operation} failed safely`, {
           operation,
           stage: errorStage,
+          ...(seedbed === undefined ? {} : { seedbed }),
           retryable: false
         })));
       }
@@ -83,4 +85,20 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function boundedStage(value: string): string {
   return /^[a-z0-9-]{1,64}$/u.test(value) ? value : "invalid-stage";
+}
+
+function safeSeedbedControlDetails(value: unknown): Readonly<Record<string, unknown>> | undefined {
+  if (!isRecord(value) || !isRecord(value.upstream)) return undefined;
+  const operation = typeof value.operation === "string" ? boundedStage(value.operation) : "invalid-stage";
+  const phase = typeof value.phase === "string" ? boundedStage(value.phase) : "invalid-stage";
+  const code = typeof value.upstream.code === "string" ? boundedStage(value.upstream.code) : "invalid-stage";
+  const upstreamPhase = typeof value.upstream.phase === "string"
+    ? boundedStage(value.upstream.phase)
+    : "invalid-stage";
+  return {
+    operation,
+    phase,
+    upstream: { code, phase: upstreamPhase },
+    retryable: value.retryable === true
+  };
 }
