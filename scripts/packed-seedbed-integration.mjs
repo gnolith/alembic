@@ -503,7 +503,13 @@ try {
     /trust evidence differs/u
   );
 
-  const componentLockPath = join(root, "node_modules", "@gnolith", "seedbed", "seedbed-component-lock.json");
+  const componentLockPath = join(
+    alembicRoot,
+    "node_modules",
+    "@gnolith",
+    "seedbed",
+    "seedbed-component-lock.json"
+  );
   const componentLock = await readFile(componentLockPath);
   const tampered = JSON.parse(componentLock.toString("utf8"));
   tampered.localBuildSelector = "gnolith-seedbed-local-build-v2";
