@@ -138,7 +138,11 @@ export class AlembicControlPlane {
       format: "gnolith-alembic-diagnostic-v1",
       purpose: "bounded-redacted-diagnosis",
       classification:
-        inspection.conflict
+        operation?.failureClassification === "workshop-stopped"
+          ? "workshop-stopped"
+          : operation?.failureClassification === "repair-failed"
+            ? "repair-failed"
+        : inspection.conflict
           ? "config-conflict"
           : operation?.state === "activation-required" || operation?.state === "activation-prerequisite"
             ? "activation-pending"
@@ -157,14 +161,19 @@ export class AlembicControlPlane {
       repair:
         operation?.state === "failed" || operation?.state === "activation-prerequisite"
           ? "resume-exact-operation"
-          : seedbed?.restartAllowed === true
-            ? "restart-recorded-components"
+          : seedbed?.repair?.kind === "seedbed-resume-operation-v1" &&
+              seedbed.repair.action === "restart-recorded-compose" &&
+              operation?.seedbed?.operationId === seedbed.repair.operationId
+            ? "resume-exact-operation"
             : "none",
       seedbed: seedbed
         ? {
             installationId: seedbed.installationId,
             classification: seedbed.classification,
-            restartAllowed: seedbed.restartAllowed
+            repairBound:
+              seedbed.repair?.kind === "seedbed-resume-operation-v1" &&
+              seedbed.repair.action === "restart-recorded-compose" &&
+              operation?.seedbed?.operationId === seedbed.repair.operationId
           }
         : null,
       forbidden: [

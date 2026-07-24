@@ -82,7 +82,13 @@ export interface WorkshopStatusOutput {
   canonicalReady: boolean;
   authorizationReady: boolean;
   lexicalReady: boolean;
-  semanticState: { state: "ready" | "degraded" | "unconfigured"; configured: boolean };
+  semanticState: {
+    state: "ready" | "degraded" | "unconfigured";
+    configured: boolean;
+    revision?: number;
+    fingerprint?: string;
+    ready?: boolean;
+  };
   producers: { ready: boolean; fingerprint: string; kinds: readonly ("task" | "memory" | "prompt")[] };
   blobReady: boolean;
   versions: { server: string; operationSchema: 9 };
@@ -112,6 +118,7 @@ export interface DockerInstallationRequest {
   baseIri: string;
   endpoint: string;
   image: DockerImageSelection;
+  semantic?: SemanticConfigurationV1;
   expected: ExpectedWorkshopStatus;
 }
 export interface SeedbedLocalBuildSelection {
@@ -130,6 +137,55 @@ export interface DigestQualifiedPulledImageSelection {
 export type DockerImageSelection =
   | SeedbedLocalBuildSelection
   | DigestQualifiedPulledImageSelection;
+export interface SemanticCredentialSelectorV1 {
+  id: string;
+  kind: "protected-file-v1";
+  path: string;
+}
+export interface OllamaSemanticProviderV1 {
+  kind: "ollama-v1";
+  endpoint: string;
+  model: string;
+  modelDigest: string;
+  dimensions: number;
+  privateNetworkApproved: true;
+}
+export interface OpenAiSemanticProviderV1 {
+  kind: "openai-v1";
+  model: string;
+  dimensions: number;
+  credentialSelectorId: string;
+}
+export interface SqliteSemanticVectorV1 {
+  kind: "sqlite-v1";
+  dimensions: number;
+}
+export interface QdrantSemanticVectorV1 {
+  kind: "qdrant-v1";
+  endpoint: string;
+  collection: string;
+  dimensions: number;
+  privateNetworkApproved: true;
+  credentialSelectorId?: string;
+}
+export interface SemanticConfigurationV1 {
+  format: "gnolith-semantic-configuration-v1";
+  revision: number;
+  fingerprint: string;
+  provider: OllamaSemanticProviderV1 | OpenAiSemanticProviderV1;
+  vector: SqliteSemanticVectorV1 | QdrantSemanticVectorV1;
+  credentialSelectors: readonly SemanticCredentialSelectorV1[];
+}
+export interface SemanticPlanProfileV1 {
+  format: "gnolith-alembic-semantic-profile-v1";
+  revision: number;
+  fingerprint: string;
+  providerKind: SemanticConfigurationV1["provider"]["kind"];
+  vectorKind: SemanticConfigurationV1["vector"]["kind"];
+  providerEndpoint: string | null;
+  vectorEndpoint: string | null;
+  credentialSelectorIds: readonly string[];
+}
 export interface SeedbedLocalBuildTrust {
   format: "gnolith-alembic-seedbed-local-build-trust-v1";
   seedbedCandidateSha256: string;
@@ -164,13 +220,22 @@ export interface InstallationReceipt {
   installationId: string;
   baseIri: string;
   expected: ExpectedWorkshopStatus;
+  semantic?: {
+    fingerprint: string;
+    revision: number;
+    state: "ready" | "degraded" | "unconfigured";
+  } | null;
   protectedTokenFile: ProtectedFileSelector;
   environmentSelector: typeof LOCAL_BEARER_ENV;
 }
 export interface InstallationDiagnosis {
   installationId: string;
   classification: string;
-  restartAllowed: boolean;
+  repair?: {
+    kind: "seedbed-resume-operation-v1";
+    operationId: string;
+    action: "restart-recorded-compose";
+  };
 }
 export interface SeedbedControl {
   inspect(request: InstallationSelector): Promise<InstallationInspection>;
@@ -223,6 +288,7 @@ export interface AlembicPlan {
   seedbedPlan: InstallationPlan | null;
   seedbedPlanDigest: string | null;
   seedbedLocalBuildTrust: SeedbedLocalBuildTrust | null;
+  semanticProfile: SemanticPlanProfileV1 | null;
   seedbedStateRoot: string | null;
   legacyAdoption: LegacyLocalAdoptionReceipt | null;
   legacyHandoff: {
@@ -265,6 +331,7 @@ export interface AlembicReceipt {
   } | null;
   verificationDigest: string | null;
   previousReceipt: string | null;
+  failureClassification: "none" | "workshop-stopped" | "repair-failed";
   message: string;
 }
 

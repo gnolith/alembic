@@ -129,7 +129,15 @@ export class MockSeedbed implements SeedbedControl {
     return this.receipt(await this.plan(request));
   }
   async diagnose() {
-    return { installationId: expectedStatus.installationId, classification: "ready", restartAllowed: true };
+    return {
+      installationId: expectedStatus.installationId,
+      classification: "local-workshop-unavailable",
+      repair: {
+        kind: "seedbed-resume-operation-v1" as const,
+        operationId: "seedbed-plan",
+        action: "restart-recorded-compose" as const
+      }
+    };
   }
   private receipt(plan: InstallationPlan): InstallationReceipt {
     return {
@@ -141,6 +149,18 @@ export class MockSeedbed implements SeedbedControl {
       installationId: plan.request.installationId,
       baseIri: plan.request.baseIri,
       expected: plan.request.expected,
+      ...(plan.request.semantic
+        ? {
+            semantic: {
+              fingerprint: plan.request.semantic.fingerprint,
+              revision: plan.request.semantic.revision,
+              state:
+                plan.request.expected.semanticState === "absent"
+                  ? "unconfigured" as const
+                  : plan.request.expected.semanticState
+            }
+          }
+        : {}),
       protectedTokenFile: {
         kind: "protected-file",
         canonicalPath: this.tokenPath,

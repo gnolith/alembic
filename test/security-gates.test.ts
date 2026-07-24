@@ -22,7 +22,8 @@ test("source has no arbitrary execution, database, query, Compose, deployment, o
     /child_process/u,
     /\bexecFile\b/u,
     /\bspawn\s*\(/u,
-    /\b(?:postgres|sqlite|qdrant|sparql)\b/iu,
+    /\b(?:postgres|sparql)\b/iu,
+    /from\s+["'][^"']*(?:sqlite|qdrant)/iu,
     /docker compose/iu,
     /cloudflare/iu,
     /hosting\.json/iu

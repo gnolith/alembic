@@ -23,6 +23,13 @@ Remote services are connect-existing only.
   inspection, and `gnolith_status` comparison before config mutation.
 - Alembic owns one exact marked URL block and refuses user-owned Gnolith tables.
 - Apply is checkpointed, idempotent, resumable, and writes config last.
+- Optional Docker-local semantic configuration is typed, fingerprint-bound,
+  selector-only, and reduced to a redacted plan profile. Only the exact
+  profile-approved Compose hosts `ollama:11434` and `qdrant:6333` may use
+  private HTTP; arbitrary private semantic targets are rejected.
+- Repair resumes only the recorded Seedbed operation. Alembic implements no
+  restart behavior and reports activation-ready only after fresh authenticated
+  Workshop identity, catalog, readiness, and status verification.
 - Success is `activation-required`: start a new Codex task in the same project.
 
 See [THREAT_MODEL.md](THREAT_MODEL.md), [COMPATIBILITY.md](COMPATIBILITY.md),
