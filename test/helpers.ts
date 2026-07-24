@@ -24,7 +24,7 @@ export const expectedStatus: ExpectedWorkshopStatus = {
   installationId: "installation-test",
   baseIri: "https://example.test/base/",
   serverVersion: "0.5.0",
-  operationVersion: "2",
+  operationVersion: "11",
   catalogDigest: WORKSHOP_CATALOG_DIGEST,
   migrationReady: true,
   canonicalReady: true,
@@ -40,9 +40,9 @@ export const localBuildSelection = {
   kind: "seedbed-local-build-v1" as const,
   selector: "gnolith-seedbed-local-build-v1" as const,
   pullPolicy: "never" as const,
-  componentLockSha256: "b96cc5bfb4f73413e12d8cffd13dd8f9f97f3ca8ffffcefcd576176c521f3190",
-  graphSha256: "15ad77b7e178bd76f4ea32d1c1570f8d287caf52b6bd87bc286ffd36f2ad34a9",
-  composeBundleSha256: "2a0f1e69f9fb2a4aeb8e906c5db3aec091cfcf52d8af0be65088da251d38235a"
+  componentLockSha256: "d41872d741f1a6f0f5e10a5572e48b2a47851c143a515327b90acebddd258644",
+  graphSha256: "abf40b3390a7f3659810a74417708a0775cc190f22654cb253df488932b79896",
+  composeBundleSha256: "e856f03d669e80615f91b609eaee4d0ca37e3b86e424f803e47a4008e9727a36"
 };
 
 export const workshopStatus: WorkshopStatusOutput = {

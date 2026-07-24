@@ -3,25 +3,25 @@
   "seedbed": {
     "package": "@gnolith/seedbed",
     "version": "0.4.0",
-    "commit": "6c9d67716bcb08000e98b0f979081a5632a9fe6e",
-    "tree": "59782b2902f6f6555d60b1a3c08545596313403b",
+    "commit": "0f8d88cfdc4b0ac5fdd658f0c91fd860817f0902",
+    "tree": "4e3f96f8107f0851dcab8cde602e68a00dd0b119",
     "artifact": "gnolith-seedbed-0.4.0.tgz",
-    "bytes": 869640,
-    "sha256": "6dff7d30c48e9c807dd81bbff9e2f650287b374997764c8e2a543f33232a284f",
+    "bytes": 1075883,
+    "sha256": "5bf4142667ffad07c39d4da2e2861b80f0736c82f87f86135b2c7c4b8567a797",
     "localBuild": {
       "kind": "seedbed-local-build-v1",
       "selector": "gnolith-seedbed-local-build-v1",
       "pullPolicy": "never",
-      "componentLockSha256": "b96cc5bfb4f73413e12d8cffd13dd8f9f97f3ca8ffffcefcd576176c521f3190",
-      "graphSha256": "15ad77b7e178bd76f4ea32d1c1570f8d287caf52b6bd87bc286ffd36f2ad34a9",
-      "composeBundleSha256": "2a0f1e69f9fb2a4aeb8e906c5db3aec091cfcf52d8af0be65088da251d38235a"
+      "componentLockSha256": "d41872d741f1a6f0f5e10a5572e48b2a47851c143a515327b90acebddd258644",
+      "graphSha256": "abf40b3390a7f3659810a74417708a0775cc190f22654cb253df488932b79896",
+      "composeBundleSha256": "e856f03d669e80615f91b609eaee4d0ca37e3b86e424f803e47a4008e9727a36"
     },
     "composeBundleArtifact": "seedbed-compose-bundle.tar.gz",
-    "composeBundleSha256": "2a0f1e69f9fb2a4aeb8e906c5db3aec091cfcf52d8af0be65088da251d38235a",
-    "sbomSha256": "ce324e2c94cf73c55d64f1cd25d997fd4124f209887c533a704fa6d64804f18b",
+    "composeBundleSha256": "e856f03d669e80615f91b609eaee4d0ca37e3b86e424f803e47a4008e9727a36",
+    "sbomSha256": "b0463c1562204908972c3b32630b1c09e1330164da0ad837305d2395c04b94cd",
     "graphArtifact": "compose-graph.json",
-    "graphSha256": "15ad77b7e178bd76f4ea32d1c1570f8d287caf52b6bd87bc286ffd36f2ad34a9",
-    "componentLockSha256": "b96cc5bfb4f73413e12d8cffd13dd8f9f97f3ca8ffffcefcd576176c521f3190"
+    "graphSha256": "abf40b3390a7f3659810a74417708a0775cc190f22654cb253df488932b79896",
+    "componentLockSha256": "d41872d741f1a6f0f5e10a5572e48b2a47851c143a515327b90acebddd258644"
   },
   "workshop": {
     "package": "@gnolith/workshop",

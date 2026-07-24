@@ -223,7 +223,7 @@ function compareStatus(
     installationId: [observed.installationId, expected.installationId],
     baseIri: [observed.baseIri, expected.baseIri],
     serverVersion: [observed.versions.server, expected.serverVersion],
-    operationVersion: [String(observed.versions.operationSchema), expected.operationVersion],
+    operationVersion: [String(observed.migrationReadiness.version), expected.operationVersion],
     catalogDigest: [observed.operationCatalogDigest, expected.catalogDigest],
     migrationReady: [observed.migrationReadiness.ready, expected.migrationReady],
     canonicalReady: [observed.canonicalReady, expected.canonicalReady],
