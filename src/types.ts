@@ -88,6 +88,10 @@ export interface WorkshopStatusOutput {
     revision: number | null;
     fingerprint: string | null;
     ready: boolean;
+    diagnostic: {
+      code: "materialization-pending" | "provider-unavailable";
+      retryable: boolean;
+    } | null;
   };
   producers: { ready: boolean; fingerprint: string; kinds: readonly ("task" | "memory" | "prompt")[] };
   blobReady: boolean;

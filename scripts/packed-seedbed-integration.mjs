@@ -256,7 +256,8 @@ try {
       configured: true,
       revision: 1,
       fingerprint: semanticFingerprint,
-      ready: true
+      ready: true,
+      diagnostic: null
     },
     producers: { ready: true, fingerprint: "packed", kinds: ["task", "memory", "prompt"] },
     blobReady: true,
@@ -318,6 +319,75 @@ try {
     semanticProfile: plan.semanticProfile,
     protectedFile: packedSeedbedReceipt(approvedSeedbedPlan).protectedTokenFile
   };
+  for (const diagnostic of [
+    { code: "materialization-pending", retryable: true },
+    { code: "provider-unavailable", retryable: true }
+  ]) {
+    const degraded = await alembic.verifyWorkshop({
+      ...verificationInput,
+      expected: { ...expected, semanticState: "degraded", allowLexicalOnly: true },
+      semanticProfile: undefined,
+      transport: workshopTransportFor({
+        ...workshopStatus,
+        semanticState: {
+          ...workshopStatus.semanticState,
+          state: "degraded",
+          ready: false,
+          diagnostic
+        }
+      })
+    });
+    assert.deepEqual(degraded.status.semanticState.diagnostic, diagnostic);
+  }
+  for (const status of [
+    {
+      ...workshopStatus,
+      semanticState: {
+        ...workshopStatus.semanticState,
+        state: "degraded",
+        ready: false,
+        diagnostic: {
+          code: "provider-unavailable",
+          retryable: true,
+          secret: "PACKED_STATUS_SECRET_CANARY"
+        }
+      }
+    },
+    {
+      ...workshopStatus,
+      semanticState: {
+        ...workshopStatus.semanticState,
+        state: "degraded",
+        ready: false,
+        diagnostic: {
+          code: "provider-unavailable",
+          retryable: true,
+          cause: { cause: { path: "C:\\protected\\credential" } }
+        }
+      }
+    },
+    {
+      ...workshopStatus,
+      semanticState: {
+        ...workshopStatus.semanticState,
+        state: "degraded",
+        ready: false,
+        diagnostic: { code: "future-unbounded-code", retryable: true }
+      }
+    },
+    {
+      ...workshopStatus,
+      capabilities: Array.from({ length: 257 }, (_, index) => `capability:${index}`)
+    }
+  ]) {
+    await assert.rejects(
+      alembic.verifyWorkshop({
+        ...verificationInput,
+        transport: workshopTransportFor(status)
+      }),
+      /pinned Workshop schema/u
+    );
+  }
   for (const semanticState of [
     { ...workshopStatus.semanticState, fingerprint: "0".repeat(64) },
     { ...workshopStatus.semanticState, revision: 2 },

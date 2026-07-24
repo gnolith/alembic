@@ -63,7 +63,8 @@ export const workshopStatus: WorkshopStatusOutput = {
     configured: true,
     revision: 1,
     fingerprint: "a".repeat(64),
-    ready: true
+    ready: true,
+    diagnostic: null
   },
   producers: { ready: true, fingerprint: "producer-fingerprint", kinds: ["task", "memory", "prompt"] },
   blobReady: true,

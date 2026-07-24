@@ -223,12 +223,16 @@ function compareStatus(
   invariant(
     exactKeys(observed.migrationReadiness, ["namespace", "version", "ready"]) &&
       exactKeys(observed.compatibility, ["diamond", "taproot"]) &&
-      exactKeys(observed.semanticState, ["state", "configured", "revision", "fingerprint", "ready"]) &&
+      exactKeys(observed.semanticState, ["state", "configured", "revision", "fingerprint", "ready", "diagnostic"]) &&
       exactKeys(observed.producers, ["ready", "fingerprint", "kinds"]) &&
       exactKeys(observed.versions, ["server", "operationSchema"]) &&
-      [observed.installationId, observed.baseIri, observed.principalId, observed.credentialId,
-        observed.producers.fingerprint, observed.versions.server].every((value) => typeof value === "string" && value.length > 0) &&
-      (observed.activeWorkspaceId === null || (typeof observed.activeWorkspaceId === "string" && observed.activeWorkspaceId.length > 0)) &&
+      boundedStatusString(observed.installationId, 256) &&
+      boundedStatusString(observed.baseIri, 4096) &&
+      boundedStatusString(observed.principalId, 256) &&
+      boundedStatusString(observed.credentialId, 256) &&
+      boundedStatusString(observed.producers.fingerprint, 256) &&
+      boundedStatusString(observed.versions.server, 128) &&
+      (observed.activeWorkspaceId === null || boundedStatusString(observed.activeWorkspaceId, 256)) &&
       ["ready", "degraded", "unconfigured"].includes(observed.semanticState.state) &&
       observed.semanticState.configured === (observed.semanticState.state !== "unconfigured") &&
       observed.migrationReadiness.namespace === "@gnolith/workshop" &&
@@ -236,9 +240,22 @@ function compareStatus(
       observed.versions.operationSchema === WORKSHOP_OPERATION_SCHEMA_VERSION &&
       Number.isInteger(observed.authorizationRevision) &&
       observed.authorizationRevision >= 0 &&
+      observed.authorizationRevision <= 1_000_000_000 &&
+      [
+        observed.migrationReadiness.ready,
+        observed.compatibility.diamond,
+        observed.compatibility.taproot,
+        observed.canonicalReady,
+        observed.authorizationReady,
+        observed.lexicalReady,
+        observed.semanticState.configured,
+        observed.semanticState.ready,
+        observed.producers.ready,
+        observed.blobReady
+      ].every((value) => typeof value === "boolean") &&
       observed.compatibility.diamond &&
       observed.compatibility.taproot &&
-      uniqueStrings(observed.capabilities) &&
+      uniqueStrings(observed.capabilities, 256, 256) &&
       uniqueStrings(observed.producers.kinds) &&
       canonicalJson([...observed.producers.kinds].sort()) === canonicalJson(["memory", "prompt", "task"]) &&
       observed.operationCatalogDigest === WORKSHOP_CATALOG_DIGEST &&
@@ -276,7 +293,7 @@ function compareStatus(
   );
   if (semanticProfile !== undefined) {
     invariant(
-      exactKeys(observed.semanticState, ["state", "configured", "revision", "fingerprint", "ready"]) &&
+      exactKeys(observed.semanticState, ["state", "configured", "revision", "fingerprint", "ready", "diagnostic"]) &&
         observed.semanticState.revision === semanticProfile.revision &&
         observed.semanticState.fingerprint === semanticProfile.fingerprint &&
         observed.semanticState.state ===
@@ -299,9 +316,10 @@ function validSemanticState(value: WorkshopStatusOutput["semanticState"]): boole
     return value.configured === false &&
       value.revision === null &&
       value.fingerprint === null &&
-      value.ready === false;
+      value.ready === false &&
+      value.diagnostic === null;
   }
-  return value.configured === true &&
+  const base = value.configured === true &&
     Number.isInteger(value.revision) &&
     value.revision !== null &&
     value.revision >= 1 &&
@@ -309,10 +327,38 @@ function validSemanticState(value: WorkshopStatusOutput["semanticState"]): boole
     typeof value.fingerprint === "string" &&
     /^[0-9a-f]{64}$/u.test(value.fingerprint) &&
     value.ready === (value.state === "ready");
+  if (!base) return false;
+  if (value.state === "ready") return value.diagnostic === null;
+  return validSemanticDiagnostic(value.diagnostic);
 }
 
-function uniqueStrings(values: readonly string[]): boolean {
-  return Array.isArray(values) && values.every((value) => typeof value === "string") && new Set(values).size === values.length;
+function validSemanticDiagnostic(value: WorkshopStatusOutput["semanticState"]["diagnostic"]): boolean {
+  return value !== null &&
+    exactKeys(value, ["code", "retryable"]) &&
+    ["materialization-pending", "provider-unavailable"].includes(value.code) &&
+    typeof value.retryable === "boolean";
+}
+
+function boundedStatusString(value: unknown, maxLength: number): value is string {
+  return typeof value === "string" &&
+    value.length > 0 &&
+    [...value].length <= maxLength &&
+    value === value.normalize("NFC") &&
+    [...value].every((character) => {
+      const codePoint = character.codePointAt(0) ?? 0;
+      return codePoint > 0x1f && codePoint !== 0x7f && (codePoint < 0x80 || codePoint > 0x9f);
+    });
+}
+
+function uniqueStrings(
+  values: readonly string[],
+  maxItems = 256,
+  maxLength = 256
+): boolean {
+  return Array.isArray(values) &&
+    values.length <= maxItems &&
+    values.every((value) => boundedStatusString(value, maxLength)) &&
+    new Set(values).size === values.length;
 }
 
 function exactKeys(value: unknown, keys: readonly string[]): boolean {

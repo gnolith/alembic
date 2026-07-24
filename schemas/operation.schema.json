@@ -26,13 +26,27 @@
         {
           "type": "object",
           "additionalProperties": false,
-          "required": ["state", "configured", "revision", "fingerprint", "ready"],
+          "required": ["state", "configured", "revision", "fingerprint", "ready", "diagnostic"],
           "properties": {
             "state": { "enum": ["ready", "degraded", "unconfigured"] },
             "configured": { "type": "boolean" },
             "revision": { "type": ["integer", "null"], "minimum": 1 },
             "fingerprint": { "type": ["string", "null"], "pattern": "^[0-9a-f]{64}$" },
-            "ready": { "type": "boolean" }
+            "ready": { "type": "boolean" },
+            "diagnostic": {
+              "oneOf": [
+                { "type": "null" },
+                {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["code", "retryable"],
+                  "properties": {
+                    "code": { "enum": ["materialization-pending", "provider-unavailable"] },
+                    "retryable": { "type": "boolean" }
+                  }
+                }
+              ]
+            }
           }
         }
       ]
