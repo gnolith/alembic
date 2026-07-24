@@ -112,7 +112,7 @@ try {
     name: "Packed Semantic",
     provider: {
       kind: "openai-compatible",
-      endpoint: "http://127.0.0.1:43118/mock",
+      endpoint: "http://127.0.0.1:43118/mock/embeddings",
       model: "text-embedding-model",
       dimensions: 1536,
       metric: "cosine",
@@ -160,7 +160,7 @@ try {
   assert.equal(seedbedPlan.request.image.pullPolicy, "never");
   assert.equal(
     seedbedPlan.request.semantic.configuration.provider.endpoint,
-    "http://host.docker.internal:43118/mock"
+    "http://host.docker.internal:43118/mock/embeddings"
   );
 
   let semanticReceiptOverride = null;
@@ -235,7 +235,7 @@ try {
   assert.equal(plan.seedbedLocalBuildTrust.seedbedCandidateSha256, "5faf7a2a7957f04e22b4137ca806b2cbf879c07842a7d5dee211e60a1790deda");
   assert.equal(plan.semanticProfile.fingerprint, semanticFingerprint);
   assert.equal(plan.semanticProfile.revision, 1);
-  assert.equal(plan.semanticProfile.providerEndpoint, "http://host.docker.internal:43118/mock");
+  assert.equal(plan.semanticProfile.providerEndpoint, "http://host.docker.internal:43118/mock/embeddings");
   assert.equal(JSON.stringify(plan.semanticProfile).includes(semanticCredentialPath), false);
 
   const workshopStatus = {
