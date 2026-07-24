@@ -3,7 +3,15 @@ import assert from "node:assert/strict";
 import { join } from "node:path";
 import { readFile } from "node:fs/promises";
 import { applyPlan, canonicalJson, createPlan, inspectConfig, resumeOperation, sha256, verifyPlan } from "../src/index.js";
-import { MockSeedbed, MockWorkshop, expectedStatus, protectedToken, temporaryProject, workshopStatus } from "./helpers.js";
+import {
+  localBuildSelection,
+  MockSeedbed,
+  MockWorkshop,
+  expectedStatus,
+  protectedToken,
+  temporaryProject,
+  workshopStatus
+} from "./helpers.js";
 
 test("Docker-local apply invokes Seedbed, verifies protocol, writes config last, and requires new task", async () => {
   const root = await temporaryProject();
@@ -14,7 +22,7 @@ test("Docker-local apply invokes Seedbed, verifies protocol, writes config last,
     installationId: expectedStatus.installationId,
     baseIri: expectedStatus.baseIri,
     endpoint: "http://127.0.0.1/mcp",
-    image: "ghcr.io/gnolith/workshop@sha256:" + "b".repeat(64),
+    image: localBuildSelection,
     expected: expectedStatus
   };
   const plan = await createPlan({
@@ -47,7 +55,7 @@ test("credential mismatch stops before config mutation with activation prerequis
     installationId: expectedStatus.installationId,
     baseIri: expectedStatus.baseIri,
     endpoint: "http://127.0.0.1/mcp",
-    image: "ghcr.io/gnolith/workshop@sha256:" + "b".repeat(64),
+    image: localBuildSelection,
     expected: expectedStatus
   };
   const plan = await createPlan({
@@ -72,7 +80,7 @@ test("activation prerequisite resumes the exact operation idempotently", async (
     installationId: expectedStatus.installationId,
     baseIri: expectedStatus.baseIri,
     endpoint: "http://127.0.0.1/mcp",
-    image: "ghcr.io/gnolith/workshop@sha256:" + "b".repeat(64),
+    image: localBuildSelection,
     expected: expectedStatus
   };
   const plan = await createPlan({
@@ -106,7 +114,7 @@ test("concurrent config change invalidates a bound plan before Seedbed mutation"
     installationId: expectedStatus.installationId,
     baseIri: expectedStatus.baseIri,
     endpoint: "http://127.0.0.1/mcp",
-    image: "ghcr.io/gnolith/workshop@sha256:" + "b".repeat(64),
+    image: localBuildSelection,
     expected: expectedStatus
   };
   const plan = await createPlan({
@@ -134,7 +142,7 @@ test("expired or modified plans fail before external mutation", async () => {
     installationId: expectedStatus.installationId,
     baseIri: expectedStatus.baseIri,
     endpoint: "http://127.0.0.1/mcp",
-    image: "ghcr.io/gnolith/workshop@sha256:" + "b".repeat(64),
+    image: localBuildSelection,
     expected: expectedStatus
   };
   const plan = await createPlan({
@@ -170,6 +178,91 @@ test("expired or modified plans fail before external mutation", async () => {
     /unapproved field/u
   );
   assert.equal(seedbed.applied, 0);
+});
+
+test("local-build trust accepts only the exact Seedbed selector and rejects tampered attestations", async () => {
+  const root = await temporaryProject();
+  const protectedCredential = await protectedToken(root);
+  const seedbed = new MockSeedbed(protectedCredential.path, protectedCredential.digest);
+  const docker = {
+    installationId: expectedStatus.installationId,
+    baseIri: expectedStatus.baseIri,
+    endpoint: "http://127.0.0.1/mcp",
+    image: localBuildSelection,
+    expected: expectedStatus
+  };
+  const request = {
+    taskDirectory: root,
+    confirmedProjectRoot: root,
+    action: "create" as const,
+    mode: "docker-local" as const,
+    endpoint: docker.endpoint,
+    authentication: { kind: "environment" as const, variable: "GNOLITH_BEARER_TOKEN" as const },
+    expected: expectedStatus,
+    docker
+  };
+  const plan = await createPlan(request, seedbed);
+  assert.equal(plan.seedbedLocalBuildTrust?.localBuild.selector, "gnolith-seedbed-local-build-v1");
+  assert.equal(plan.seedbedLocalBuildTrust?.localBuild.pullPolicy, "never");
+
+  for (const field of ["componentLockSha256", "graphSha256"] as const) {
+    const changed = {
+      ...plan,
+      seedbedLocalBuildTrust: {
+        ...plan.seedbedLocalBuildTrust!,
+        localBuild: {
+          ...plan.seedbedLocalBuildTrust!.localBuild,
+          [field]: "0".repeat(64)
+        }
+      }
+    };
+    const unsigned = Object.fromEntries(
+      Object.entries(changed).filter(([key]) => key !== "digest")
+    ) as Omit<typeof changed, "digest">;
+    assert.throws(
+      () => verifyPlan({ ...unsigned, digest: sha256(canonicalJson(unsigned)) }),
+      /trust evidence differs/u
+    );
+  }
+
+  await assert.rejects(
+    createPlan({
+      ...request,
+      docker: {
+        ...docker,
+        image: { ...localBuildSelection, selector: "gnolith-seedbed-local-build-v2" }
+      }
+    } as unknown as Parameters<typeof createPlan>[0], seedbed),
+    /exact attested Seedbed local build/u
+  );
+  await assert.rejects(
+    createPlan({
+      ...request,
+      docker: {
+        ...docker,
+        image: {
+          kind: "digest-qualified-pulled-image-v1",
+          reference: "ghcr.io/gnolith/workshop:latest",
+          pullPolicy: "digest-only"
+        }
+      }
+    }, seedbed),
+    /digest-qualified pulled image/u
+  );
+  await assert.rejects(
+    createPlan({
+      ...request,
+      docker: {
+        ...docker,
+        image: {
+          kind: "digest-qualified-pulled-image-v1",
+          reference: `ghcr.io/gnolith/workshop@sha256:${"a".repeat(64)}`,
+          pullPolicy: "digest-only"
+        }
+      }
+    }, seedbed),
+    /exact pinned local-build selector/u
+  );
 });
 
 test("remote OAuth validates metadata, uses host token transiently, and writes auth only", async () => {

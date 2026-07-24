@@ -34,6 +34,15 @@ export const expectedStatus: ExpectedWorkshopStatus = {
   allowLexicalOnly: false
 };
 
+export const localBuildSelection = {
+  kind: "seedbed-local-build-v1" as const,
+  selector: "gnolith-seedbed-local-build-v1" as const,
+  pullPolicy: "never" as const,
+  componentLockSha256: "b96cc5bfb4f73413e12d8cffd13dd8f9f97f3ca8ffffcefcd576176c521f3190",
+  graphSha256: "15ad77b7e178bd76f4ea32d1c1570f8d287caf52b6bd87bc286ffd36f2ad34a9",
+  composeBundleSha256: "2a0f1e69f9fb2a4aeb8e906c5db3aec091cfcf52d8af0be65088da251d38235a"
+};
+
 export const workshopStatus: WorkshopStatusOutput = {
   installationId: expectedStatus.installationId,
   baseIri: expectedStatus.baseIri,
@@ -95,7 +104,7 @@ export class MockSeedbed implements SeedbedControl {
     return {
       id: "seedbed-plan",
       digest: sha256(canonicalJson(request)),
-      version: "0.4.0",
+      version: "gnolith-seedbed-control-plan-v2",
       request,
       steps: ["fixed Seedbed assembly"],
       stateRoot: {
@@ -114,7 +123,7 @@ export class MockSeedbed implements SeedbedControl {
       installationId: expectedStatus.installationId,
       baseIri: expectedStatus.baseIri,
       endpoint: "http://127.0.0.1/mcp",
-      image: "ghcr.io/gnolith/workshop@sha256:" + "b".repeat(64),
+      image: localBuildSelection,
       expected: expectedStatus
     };
     return this.receipt(await this.plan(request));
@@ -124,10 +133,10 @@ export class MockSeedbed implements SeedbedControl {
   }
   private receipt(plan: InstallationPlan): InstallationReceipt {
     return {
-      operationId: "seedbed-operation",
+      operationId: plan.id,
       state: "ready",
       version: "0.4.0",
-      digest: "c".repeat(64),
+      digest: plan.digest,
       endpoint: plan.request.endpoint,
       installationId: plan.request.installationId,
       baseIri: plan.request.baseIri,

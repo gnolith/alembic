@@ -5,7 +5,7 @@
 | Node.js | 22.x and 24.x |
 | Codex desktop/CLI | Host metadata v1; explicit canonical-root confirmation fallback |
 | Operating systems | Windows, macOS, Linux |
-| Seedbed | `@gnolith/seedbed@0.4.0`, exact Alembic `SeedbedControl` adapter |
+| Seedbed | `@gnolith/seedbed@0.4.0`, exact Alembic `SeedbedControl` adapter and `gnolith-seedbed-local-build-v1` never-pulled selector |
 | Workshop | `@gnolith/workshop@0.5.0`, protocol schema v1, MCP HTTP `/mcp`, identity `gnolith` |
 | Legacy Setup | exact source `@gnolith/codex-plugin@0.2.0`, schema 1; migration artifact 0.3.0 |
 | Docker-local auth | `local-bearer-v1`, `GNOLITH_BEARER_TOKEN` |

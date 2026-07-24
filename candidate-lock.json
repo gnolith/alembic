@@ -3,13 +3,23 @@
   "seedbed": {
     "package": "@gnolith/seedbed",
     "version": "0.4.0",
-    "commit": "6a21c5c02b092a923502007a1109e7fc023dbce7",
-    "tree": "41e5146cd19dc9af27e7039d796e2a6256e62cf1",
+    "commit": "6c9d67716bcb08000e98b0f979081a5632a9fe6e",
+    "tree": "59782b2902f6f6555d60b1a3c08545596313403b",
     "artifact": "gnolith-seedbed-0.4.0.tgz",
-    "bytes": 867592,
-    "sha256": "c0fea748fe8e97483408e7042d7a1250eb57b18ec14e0a85e0945ef97044a9db",
+    "bytes": 869640,
+    "sha256": "6dff7d30c48e9c807dd81bbff9e2f650287b374997764c8e2a543f33232a284f",
+    "localBuild": {
+      "kind": "seedbed-local-build-v1",
+      "selector": "gnolith-seedbed-local-build-v1",
+      "pullPolicy": "never",
+      "componentLockSha256": "b96cc5bfb4f73413e12d8cffd13dd8f9f97f3ca8ffffcefcd576176c521f3190",
+      "graphSha256": "15ad77b7e178bd76f4ea32d1c1570f8d287caf52b6bd87bc286ffd36f2ad34a9",
+      "composeBundleSha256": "2a0f1e69f9fb2a4aeb8e906c5db3aec091cfcf52d8af0be65088da251d38235a"
+    },
+    "composeBundleArtifact": "seedbed-compose-bundle.tar.gz",
     "composeBundleSha256": "2a0f1e69f9fb2a4aeb8e906c5db3aec091cfcf52d8af0be65088da251d38235a",
-    "sbomSha256": "600c7f39526de1cbc6c3365fed4ff2dafd9fc7cd50a2831ade184ce4261399a1",
+    "sbomSha256": "ce324e2c94cf73c55d64f1cd25d997fd4124f209887c533a704fa6d64804f18b",
+    "graphArtifact": "compose-graph.json",
     "graphSha256": "15ad77b7e178bd76f4ea32d1c1570f8d287caf52b6bd87bc286ffd36f2ad34a9",
     "componentLockSha256": "b96cc5bfb4f73413e12d8cffd13dd8f9f97f3ca8ffffcefcd576176c521f3190"
   },

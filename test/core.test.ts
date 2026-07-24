@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { join } from "node:path";
-import { writeFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import {
   BEGIN_MARKER,
   END_MARKER,
@@ -11,7 +11,8 @@ import {
   attestProject,
   approveEndpoint,
   TOOL_CATALOG,
-  TOOL_NAMES
+  TOOL_NAMES,
+  SEEDBED_LOCAL_BUILD_TRUST
 } from "../src/index.js";
 import { temporaryProject } from "./helpers.js";
 
@@ -20,6 +21,27 @@ test("fixed catalog contains only nine bounded Alembic operations", () => {
   assert.equal(TOOL_CATALOG.length, 9);
   assert.equal(TOOL_CATALOG.some(({ name }) => /gnolith|search|knowledge|query/u.test(name)), false);
   assert.equal(TOOL_CATALOG.every(({ inputSchema }) => inputSchema.additionalProperties === false), true);
+});
+
+test("runtime Seedbed local-build trust exactly matches the public candidate lock", async () => {
+  const lock = JSON.parse(await readFile(join(process.cwd(), "candidate-lock.json"), "utf8")) as {
+    seedbed: {
+      sha256: string;
+      localBuild: {
+        kind: string;
+        selector: string;
+        pullPolicy: string;
+        componentLockSha256: string;
+        graphSha256: string;
+        composeBundleSha256: string;
+      };
+    };
+  };
+  assert.deepEqual(SEEDBED_LOCAL_BUILD_TRUST, {
+    format: "gnolith-alembic-seedbed-local-build-trust-v1",
+    seedbedCandidateSha256: lock.seedbed.sha256,
+    localBuild: lock.seedbed.localBuild
+  });
 });
 
 test("exact local block has mutually exclusive selector and URL-only shape", () => {

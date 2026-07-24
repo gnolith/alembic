@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { isAbsolute, join } from "node:path";
+import { dirname, isAbsolute, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { gunzipSync } from "node:zlib";
 
@@ -23,6 +23,10 @@ const coordinates = {
     sha256: lock.legacy.sha256
   })
 };
+coordinates.seedbed.localBuild = await verifySeedbedLocalBuildArtifacts(
+  coordinates.seedbed.coordinate,
+  lock.seedbed
+);
 const { stdout: commit } = await exec("git", ["rev-parse", "HEAD"], { cwd: root });
 const { stdout: status } = await exec("git", ["status", "--porcelain", "--untracked-files=all"], { cwd: root });
 if (status.trim()) throw new Error("Candidate requires a clean committed worktree");
@@ -34,6 +38,15 @@ if (!Array.isArray(packed) || packed.length !== 1) throw new Error("Unexpected n
 const archiveName = packed[0].filename;
 const archivePath = join(fileURLToPath(artifacts), archiveName);
 const archiveDigest = digest(await readFile(archivePath));
+await exec(
+  process.execPath,
+  [
+    fileURLToPath(new URL("./packed-seedbed-integration.mjs", import.meta.url)),
+    archivePath,
+    coordinates.seedbed.coordinate
+  ],
+  { cwd: root, maxBuffer: 20 * 1024 * 1024 }
+);
 const { stdout: sbom } = await exec(npmCommand, [...npmPrefix, "sbom", "--sbom-format", "cyclonedx"], { cwd: root, maxBuffer: 20 * 1024 * 1024 });
 const sbomPath = new URL("../artifacts/alembic-0.1.0.cdx.json", import.meta.url);
 await writeFile(sbomPath, sbom);
@@ -120,6 +133,10 @@ function digest(bytes) {
 }
 
 function packageManifest(gzipped) {
+  return JSON.parse(packageFile(gzipped, "package/package.json").toString("utf8"));
+}
+
+function packageFile(gzipped, requestedName) {
   const tar = gunzipSync(gzipped);
   let offset = 0;
   while (offset + 512 <= tar.byteLength) {
@@ -129,8 +146,42 @@ function packageManifest(gzipped) {
     const sizeText = header.subarray(124, 136).toString("ascii").replace(/\0.*$/u, "").trim();
     const size = Number.parseInt(sizeText || "0", 8);
     const body = tar.subarray(offset + 512, offset + 512 + size);
-    if (name === "package/package.json") return JSON.parse(body.toString("utf8"));
+    if (name === requestedName) return body;
     offset += 512 + Math.ceil(size / 512) * 512;
   }
-  throw new Error("Candidate archive has no package/package.json");
+  throw new Error(`Candidate archive has no ${requestedName}`);
+}
+
+async function verifySeedbedLocalBuildArtifacts(coordinate, expected) {
+  if (
+    expected.localBuild.kind !== "seedbed-local-build-v1" ||
+    expected.localBuild.selector !== "gnolith-seedbed-local-build-v1" ||
+    expected.localBuild.pullPolicy !== "never"
+  ) {
+    throw new Error("Candidate lock has another Seedbed local-build selector");
+  }
+  const packageBytes = await readFile(coordinate);
+  const componentLock = packageFile(packageBytes, "package/seedbed-component-lock.json");
+  if (digest(componentLock) !== expected.localBuild.componentLockSha256) {
+    throw new Error("Seedbed candidate component lock differs from candidate lock");
+  }
+  const parsed = JSON.parse(componentLock.toString("utf8"));
+  if (
+    parsed.format !== "gnolith-seedbed-component-lock-v1" ||
+    parsed.localBuildSelector !== expected.localBuild.selector
+  ) {
+    throw new Error("Seedbed candidate component lock has another local-build contract");
+  }
+  const graphPath = join(dirname(coordinate), expected.graphArtifact);
+  const composeBundlePath = join(dirname(coordinate), expected.composeBundleArtifact);
+  if (digest(await readFile(graphPath)) !== expected.localBuild.graphSha256) {
+    throw new Error("Seedbed graph differs from candidate lock");
+  }
+  if (digest(await readFile(composeBundlePath)) !== expected.localBuild.composeBundleSha256) {
+    throw new Error("Seedbed Compose bundle differs from candidate lock");
+  }
+  return {
+    seedbedCandidateSha256: expected.sha256,
+    localBuild: expected.localBuild
+  };
 }

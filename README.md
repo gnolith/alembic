@@ -14,6 +14,10 @@ Remote services are connect-existing only.
 - Plans bind the canonical project, config digest, endpoint, auth selector,
   expected identity, approved external Seedbed state selector, compatibility
   coordinates, expiry, and operation ID.
+- Docker-local plans accept Seedbed's exact versioned
+  `gnolith-seedbed-local-build-v1` selector, which is never pulled. They bind
+  the exact Seedbed candidate, component-lock, rendered graph, and Compose
+  bundle digests. Any registry image path remains SHA-256-digest-qualified.
 - Credential selectors—not credential values—are accepted or stored.
 - Workshop verification performs authenticated MCP initialization, catalog
   inspection, and `gnolith_status` comparison before config mutation.
@@ -34,8 +38,10 @@ npm run gate
 npm run candidate
 ```
 
-`candidate` creates an unpublished package archive, CycloneDX SBOM, inventory,
-and lowercase SHA-256 checksums. It never tags, releases, or publishes.
+`candidate` verifies the exact Seedbed package/component-lock/graph/Compose
+bundle, runs a packed Alembic+Seedbed plan/apply/no-pull/nine-tool integration,
+then creates an unpublished package archive, CycloneDX SBOM, inventory, and
+lowercase SHA-256 checksums. It never tags, releases, or publishes.
 
 Uninstalling or disabling the Alembic plugin does not remove project config,
 installations, volumes, backups, protected credentials, operation receipts, or

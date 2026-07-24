@@ -111,8 +111,29 @@ export interface DockerInstallationRequest {
   installationId: string;
   baseIri: string;
   endpoint: string;
-  image: string;
+  image: DockerImageSelection;
   expected: ExpectedWorkshopStatus;
+}
+export interface SeedbedLocalBuildSelection {
+  kind: "seedbed-local-build-v1";
+  selector: "gnolith-seedbed-local-build-v1";
+  pullPolicy: "never";
+  componentLockSha256: string;
+  graphSha256: string;
+  composeBundleSha256: string;
+}
+export interface DigestQualifiedPulledImageSelection {
+  kind: "digest-qualified-pulled-image-v1";
+  reference: string;
+  pullPolicy: "digest-only";
+}
+export type DockerImageSelection =
+  | SeedbedLocalBuildSelection
+  | DigestQualifiedPulledImageSelection;
+export interface SeedbedLocalBuildTrust {
+  format: "gnolith-alembic-seedbed-local-build-trust-v1";
+  seedbedCandidateSha256: string;
+  localBuild: SeedbedLocalBuildSelection;
 }
 export interface InstallationSelector {
   installationId: string;
@@ -201,6 +222,7 @@ export interface AlembicPlan {
   expected: ExpectedWorkshopStatus;
   seedbedPlan: InstallationPlan | null;
   seedbedPlanDigest: string | null;
+  seedbedLocalBuildTrust: SeedbedLocalBuildTrust | null;
   seedbedStateRoot: string | null;
   legacyAdoption: LegacyLocalAdoptionReceipt | null;
   legacyHandoff: {
