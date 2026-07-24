@@ -191,14 +191,16 @@ export class AlembicControlPlane {
     const project = await attestProject(input);
     const bundlePath = await realpath(input.bundlePath);
     const bundleInfo = await lstat(input.bundlePath);
-    if (
+    invariant(
+      !(
       bundlePath !== input.bundlePath ||
       bundleInfo.isSymbolicLink() ||
       !bundleInfo.isFile() ||
       !(bundlePath === project.root || bundlePath.startsWith(`${project.root}${process.platform === "win32" ? "\\" : "/"}`))
-    ) {
-      throw new Error("Legacy bundle must be an exact regular file inside the attested project");
-    }
+      ),
+      "legacy-bundle-scope",
+      "Legacy bundle must be an exact regular file inside the attested project"
+    );
     const bytes = await readFile(input.bundlePath);
     return inspectLegacyBundle({
       bytes,

@@ -44,6 +44,24 @@ try {
   const alembic = await import(pathToFileURL(join(alembicRoot, "dist", "index.js")).href);
   assert.equal(alembic.TOOL_NAMES.length, 9);
   assert.equal(new Set(alembic.TOOL_NAMES).size, 9);
+  const outsideBundle = join(root, "outside-project-bundle.json");
+  await writeFile(outsideBundle, "{}");
+  const packedControl = new alembic.AlembicControlPlane();
+  await assert.rejects(
+    packedControl.legacyInspect({
+      bundlePath: outsideBundle,
+      taskDirectory: projectRoot,
+      confirmedProjectRoot: projectRoot,
+      packageName: "@gnolith/codex-plugin",
+      packageVersion: "0.2.0"
+    }),
+    (error) => {
+      assert.equal(error.code, "legacy-bundle-scope");
+      assert.equal(error.message, "Legacy bundle must be an exact regular file inside the attested project");
+      assert.doesNotMatch(JSON.stringify(error), new RegExp(root.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&"), "u"));
+      return true;
+    }
+  );
 
   const factory = await alembic.loadDefaultSeedbedFactory();
   const exactSeedbed = factory(projectRoot, stateRoot);
