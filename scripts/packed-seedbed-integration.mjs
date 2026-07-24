@@ -320,8 +320,22 @@ try {
     protectedFile: packedSeedbedReceipt(approvedSeedbedPlan).protectedTokenFile
   };
   for (const diagnostic of [
-    { code: "materialization-pending", retryable: true },
-    { code: "provider-unavailable", retryable: true }
+    {
+      format: "gnolith-workshop-semantic-diagnostic-v1",
+      version: 1,
+      code: "materialization-pending",
+      retryable: true,
+      backend: "sqlite",
+      repair: "retry"
+    },
+    {
+      format: "gnolith-workshop-semantic-diagnostic-v1",
+      version: 1,
+      code: "provider-unavailable",
+      retryable: true,
+      backend: "qdrant",
+      repair: "retry"
+    }
   ]) {
     const degraded = await alembic.verifyWorkshop({
       ...verificationInput,
@@ -347,8 +361,12 @@ try {
         state: "degraded",
         ready: false,
         diagnostic: {
+          format: "gnolith-workshop-semantic-diagnostic-v1",
+          version: 1,
           code: "provider-unavailable",
           retryable: true,
+          backend: "sqlite",
+          repair: "retry",
           secret: "PACKED_STATUS_SECRET_CANARY"
         }
       }
@@ -360,8 +378,12 @@ try {
         state: "degraded",
         ready: false,
         diagnostic: {
+          format: "gnolith-workshop-semantic-diagnostic-v1",
+          version: 1,
           code: "provider-unavailable",
           retryable: true,
+          backend: "qdrant",
+          repair: "retry",
           cause: { cause: { path: "C:\\protected\\credential" } }
         }
       }
@@ -372,7 +394,14 @@ try {
         ...workshopStatus.semanticState,
         state: "degraded",
         ready: false,
-        diagnostic: { code: "future-unbounded-code", retryable: true }
+        diagnostic: {
+          format: "gnolith-workshop-semantic-diagnostic-v1",
+          version: 1,
+          code: "future-unbounded-code",
+          retryable: true,
+          backend: "sqlite",
+          repair: "retry"
+        }
       }
     },
     {

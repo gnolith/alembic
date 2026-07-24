@@ -334,9 +334,13 @@ function validSemanticState(value: WorkshopStatusOutput["semanticState"]): boole
 
 function validSemanticDiagnostic(value: WorkshopStatusOutput["semanticState"]["diagnostic"]): boolean {
   return value !== null &&
-    exactKeys(value, ["code", "retryable"]) &&
+    exactKeys(value, ["format", "version", "code", "retryable", "backend", "repair"]) &&
+    value.format === "gnolith-workshop-semantic-diagnostic-v1" &&
+    value.version === 1 &&
     ["materialization-pending", "provider-unavailable"].includes(value.code) &&
-    typeof value.retryable === "boolean";
+    typeof value.retryable === "boolean" &&
+    ["sqlite", "qdrant"].includes(value.backend) &&
+    value.repair === "retry";
 }
 
 function boundedStatusString(value: unknown, maxLength: number): value is string {

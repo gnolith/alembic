@@ -871,7 +871,14 @@ test("semantic planning binds a redacted profile and only approved Compose-priva
         revision: 1,
         fingerprint: ollamaProfile.fingerprint,
         ready: false,
-        diagnostic: { code: "provider-unavailable", retryable: true }
+        diagnostic: {
+          format: "gnolith-workshop-semantic-diagnostic-v1",
+          version: 1,
+          code: "provider-unavailable",
+          retryable: true,
+          backend: "sqlite",
+          repair: "retry"
+        }
       }
     })
   });
@@ -1237,7 +1244,14 @@ test("wrong identity, shallow catalog, and degraded semantics cannot verify", as
         revision: 1,
         fingerprint: "a".repeat(64),
         ready: false,
-        diagnostic: { code: "provider-unavailable", retryable: true }
+        diagnostic: {
+          format: "gnolith-workshop-semantic-diagnostic-v1",
+          version: 1,
+          code: "provider-unavailable",
+          retryable: true,
+          backend: "sqlite",
+          repair: "retry"
+        }
       }
     })
   }), /Semantic degradation/u);
@@ -1268,7 +1282,14 @@ test("version-2 Workshop semantic diagnostics are exact, bounded, and secret-fre
       revision: 1,
       fingerprint: "a".repeat(64),
       ready: false,
-      diagnostic: { code: "materialization-pending", retryable: true }
+      diagnostic: {
+        format: "gnolith-workshop-semantic-diagnostic-v1",
+        version: 1,
+        code: "materialization-pending",
+        retryable: true,
+        backend: "sqlite",
+        repair: "retry"
+      }
     }
   };
   const accepted = await verifyWorkshop({
@@ -1276,8 +1297,12 @@ test("version-2 Workshop semantic diagnostics are exact, bounded, and secret-fre
     transport: new MockWorkshop(liveFailureStatus)
   });
   assert.deepEqual(accepted.status.semanticState.diagnostic, {
+    format: "gnolith-workshop-semantic-diagnostic-v1",
+    version: 1,
     code: "materialization-pending",
-    retryable: true
+    retryable: true,
+    backend: "sqlite",
+    repair: "retry"
   });
 
   const adversarial = [
@@ -1286,8 +1311,12 @@ test("version-2 Workshop semantic diagnostics are exact, bounded, and secret-fre
       semanticState: {
         ...liveFailureStatus.semanticState,
         diagnostic: {
+          format: "gnolith-workshop-semantic-diagnostic-v1",
+          version: 1,
           code: "provider-unavailable",
           retryable: true,
+          backend: "qdrant",
+          repair: "retry",
           message: "Bearer SECRET_CANARY must not cross the status boundary"
         }
       }
@@ -1296,7 +1325,14 @@ test("version-2 Workshop semantic diagnostics are exact, bounded, and secret-fre
       ...liveFailureStatus,
       semanticState: {
         ...liveFailureStatus.semanticState,
-        diagnostic: { code: "unknown-provider-code", retryable: true }
+        diagnostic: {
+          format: "gnolith-workshop-semantic-diagnostic-v1",
+          version: 1,
+          code: "unknown-provider-code",
+          retryable: true,
+          backend: "sqlite",
+          repair: "retry"
+        }
       }
     },
     {
@@ -1304,9 +1340,27 @@ test("version-2 Workshop semantic diagnostics are exact, bounded, and secret-fre
       semanticState: {
         ...liveFailureStatus.semanticState,
         diagnostic: {
+          format: "gnolith-workshop-semantic-diagnostic-v1",
+          version: 1,
           code: "provider-unavailable",
           retryable: true,
+          backend: "sqlite",
+          repair: "retry",
           cause: { cause: { cause: { path: "C:\\secret\\token" } } }
+        }
+      }
+    },
+    {
+      ...liveFailureStatus,
+      semanticState: {
+        ...liveFailureStatus.semanticState,
+        diagnostic: {
+          format: "gnolith-workshop-semantic-diagnostic-v1",
+          version: 2,
+          code: "provider-unavailable",
+          retryable: "yes",
+          backend: "https://vector.invalid/secret",
+          repair: "restart"
         }
       }
     },

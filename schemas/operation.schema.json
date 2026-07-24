@@ -39,10 +39,14 @@
                 {
                   "type": "object",
                   "additionalProperties": false,
-                  "required": ["code", "retryable"],
+                  "required": ["format", "version", "code", "retryable", "backend", "repair"],
                   "properties": {
+                    "format": { "const": "gnolith-workshop-semantic-diagnostic-v1" },
+                    "version": { "const": 1 },
                     "code": { "enum": ["materialization-pending", "provider-unavailable"] },
-                    "retryable": { "type": "boolean" }
+                    "retryable": { "type": "boolean" },
+                    "backend": { "enum": ["sqlite", "qdrant"] },
+                    "repair": { "const": "retry" }
                   }
                 }
               ]
