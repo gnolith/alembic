@@ -77,7 +77,7 @@ export interface WorkshopStatusOutput {
   activeWorkspaceId: string | null;
   capabilities: readonly string[];
   authorizationRevision: number;
-  migrationReadiness: { namespace: "@gnolith/workshop"; version: number; ready: boolean };
+  migrationReadiness: { namespace: "@gnolith/workshop"; version: 11; ready: boolean };
   compatibility: { diamond: boolean; taproot: boolean };
   canonicalReady: boolean;
   authorizationReady: boolean;
@@ -85,13 +85,13 @@ export interface WorkshopStatusOutput {
   semanticState: {
     state: "ready" | "degraded" | "unconfigured";
     configured: boolean;
-    revision?: number;
-    fingerprint?: string;
-    ready?: boolean;
+    revision: number | null;
+    fingerprint: string | null;
+    ready: boolean;
   };
   producers: { ready: boolean; fingerprint: string; kinds: readonly ("task" | "memory" | "prompt")[] };
   blobReady: boolean;
-  versions: { server: string; operationSchema: 9 };
+  versions: { server: string; operationSchema: 2 };
   operationCatalogDigest: string;
 }
 
@@ -328,6 +328,7 @@ export interface AlembicReceipt {
     operationId: string;
   } | null;
   verificationDigest: string | null;
+  semanticVerification: WorkshopStatusOutput["semanticState"] | null;
   previousReceipt: string | null;
   failureClassification: "none" | "workshop-stopped" | "repair-failed";
   message: string;

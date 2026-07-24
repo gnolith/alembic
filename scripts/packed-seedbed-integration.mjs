@@ -8,8 +8,10 @@ import { pathToFileURL } from "node:url";
 import { promisify } from "node:util";
 
 const exec = promisify(execFile);
-const [alembicArchive, seedbedArchive] = process.argv.slice(2);
-if (!alembicArchive || !seedbedArchive) throw new Error("Exact Alembic and Seedbed archives are required");
+const [alembicArchive, seedbedArchive, workshopArchive] = process.argv.slice(2);
+if (!alembicArchive || !seedbedArchive || !workshopArchive) {
+  throw new Error("Exact Alembic, Seedbed, and Workshop archives are required");
+}
 const root = await mkdtemp(join(tmpdir(), "alembic-packed-seedbed-"));
 const projectRoot = join(root, "project");
 const stateRoot = join(root, "state");
@@ -36,14 +38,27 @@ try {
       "--package-lock=false",
       "--legacy-peer-deps",
       alembicArchive,
-      seedbedArchive
+      seedbedArchive,
+      workshopArchive
     ],
     { maxBuffer: 20 * 1024 * 1024 }
   );
   const alembicRoot = join(root, "node_modules", "@gnolith", "alembic");
   const alembic = await import(pathToFileURL(join(alembicRoot, "dist", "index.js")).href);
+  const workshopContract = await import(pathToFileURL(
+    join(root, "node_modules", "@gnolith", "workshop", "dist", "protocol", "catalog.js")
+  ).href);
   assert.equal(alembic.TOOL_NAMES.length, 9);
   assert.equal(new Set(alembic.TOOL_NAMES).size, 9);
+  assert.equal(workshopContract.OPERATION_SCHEMA_VERSION, 2);
+  assert.equal(
+    workshopContract.CATALOG_DIGEST,
+    "a57799a792a075a5e359567240a7241a48df4155fae3a9e73b092ccf9035955b"
+  );
+  assert.deepEqual(
+    workshopContract.operationCatalog.map(({ name }) => name),
+    [...alembic.WORKSHOP_TOOL_NAMES]
+  );
   const outsideBundle = join(root, "outside-project-bundle.json");
   await writeFile(outsideBundle, "{}");
   const packedControl = new alembic.AlembicControlPlane();
@@ -65,12 +80,22 @@ try {
 
   const factory = await alembic.loadDefaultSeedbedFactory();
   const exactSeedbed = factory(projectRoot, stateRoot);
+  const token = "packed_exact_local_token";
+  const tokenPath = join(stateRoot, "packed-token");
+  const semanticCredentialPath = join(stateRoot, "packed-openai-key");
+  await writeFile(tokenPath, `${token}\n`, { mode: 0o600 });
+  await writeFile(semanticCredentialPath, "packed_openai_key\n", { mode: 0o600 });
+  if (process.platform !== "win32") {
+    await chmod(tokenPath, 0o600);
+    await chmod(semanticCredentialPath, 0o600);
+  }
+  process.env.GNOLITH_BEARER_TOKEN = token;
   const expected = {
     installationId: "packed-integration",
     baseIri: "https://example.test/packed/",
     serverVersion: "0.5.0",
-    operationVersion: "9",
-    catalogDigest: "577cc1de501b0ae3556eb1d32e7dd516c70a09c5b6226d671cec312068fba3dd",
+    operationVersion: "2",
+    catalogDigest: "a57799a792a075a5e359567240a7241a48df4155fae3a9e73b092ccf9035955b",
     migrationReady: true,
     canonicalReady: true,
     authorizationReady: true,
@@ -80,6 +105,30 @@ try {
     semanticState: "ready",
     allowLexicalOnly: false
   };
+  const semanticConfiguration = {
+    version: 1,
+    id: "packed-semantic",
+    name: "Packed Semantic",
+    provider: {
+      kind: "openai-compatible",
+      endpoint: "https://api.example.test/v1",
+      model: "text-embedding-model",
+      dimensions: 1536,
+      metric: "cosine",
+      credentialSelector: "packed-openai-key",
+      allowPrivateEndpoint: false,
+      redirectPolicy: "error"
+    },
+    vector: {
+      kind: "qdrant",
+      endpoint: "http://qdrant:6333",
+      collection: "packed-semantic",
+      credentialSelector: null,
+      allowPrivateEndpoint: true,
+      redirectPolicy: "error"
+    }
+  };
+  const semanticFingerprint = alembic.semanticFingerprint(semanticConfiguration);
   const docker = {
     installationId: expected.installationId,
     baseIri: expected.baseIri,
@@ -91,6 +140,15 @@ try {
       componentLockSha256: "b96cc5bfb4f73413e12d8cffd13dd8f9f97f3ca8ffffcefcd576176c521f3190",
       graphSha256: "15ad77b7e178bd76f4ea32d1c1570f8d287caf52b6bd87bc286ffd36f2ad34a9",
       composeBundleSha256: "2a0f1e69f9fb2a4aeb8e906c5db3aec091cfcf52d8af0be65088da251d38235a"
+    },
+    semantic: {
+      configuration: semanticConfiguration,
+      expectedRevision: 0,
+      credentialSelectors: [{
+        id: "packed-openai-key",
+        kind: "protected-file-v1",
+        path: semanticCredentialPath
+      }]
     },
     expected
   };
@@ -104,11 +162,7 @@ try {
   assert.equal(seedbedPlan.request.image.selector, "gnolith-seedbed-local-build-v1");
   assert.equal(seedbedPlan.request.image.pullPolicy, "never");
 
-  const token = "packed_exact_local_token";
-  const tokenPath = join(stateRoot, "packed-token");
-  await writeFile(tokenPath, `${token}\n`, { mode: 0o600 });
-  if (process.platform !== "win32") await chmod(tokenPath, 0o600);
-  process.env.GNOLITH_BEARER_TOKEN = token;
+  let semanticReceiptOverride = null;
   const packedSeedbedReceipt = (plan) => ({
     operationId: plan.id,
     state: "ready",
@@ -118,6 +172,11 @@ try {
     installationId: plan.request.installationId,
     baseIri: plan.request.baseIri,
     expected: plan.request.expected,
+    semantic: semanticReceiptOverride ?? {
+      fingerprint: semanticFingerprint,
+      revision: 1,
+      state: "ready"
+    },
     protectedTokenFile: {
       kind: "protected-file",
       canonicalPath: tokenPath,
@@ -158,6 +217,9 @@ try {
   }, seedbed);
   assert.deepEqual(plan.seedbedPlan.request, seedbedPlan.request);
   assert.equal(plan.seedbedLocalBuildTrust.seedbedCandidateSha256, "6dff7d30c48e9c807dd81bbff9e2f650287b374997764c8e2a543f33232a284f");
+  assert.equal(plan.semanticProfile.fingerprint, semanticFingerprint);
+  assert.equal(plan.semanticProfile.revision, 1);
+  assert.equal(JSON.stringify(plan.semanticProfile).includes(semanticCredentialPath), false);
 
   const workshopStatus = {
     installationId: expected.installationId,
@@ -167,18 +229,24 @@ try {
     activeWorkspaceId: null,
     capabilities: ["gnolith:use"],
     authorizationRevision: 1,
-    migrationReadiness: { namespace: "@gnolith/workshop", version: 1, ready: true },
+    migrationReadiness: { namespace: "@gnolith/workshop", version: 11, ready: true },
     compatibility: { diamond: true, taproot: true },
     canonicalReady: true,
     authorizationReady: true,
     lexicalReady: true,
-    semanticState: { state: "ready", configured: true },
+    semanticState: {
+      state: "ready",
+      configured: true,
+      revision: 1,
+      fingerprint: semanticFingerprint,
+      ready: true
+    },
     producers: { ready: true, fingerprint: "packed", kinds: ["task", "memory", "prompt"] },
     blobReady: true,
-    versions: { server: "0.5.0", operationSchema: 9 },
+    versions: { server: "0.5.0", operationSchema: 2 },
     operationCatalogDigest: expected.catalogDigest
   };
-  const workshopTransport = {
+  const workshopTransportFor = (status) => ({
     async call(_endpoint, _token, method) {
       if (method === "initialize") {
         return {
@@ -195,7 +263,7 @@ try {
           response: {
             jsonrpc: "2.0",
             id: 1,
-            result: { tools: [{ name: "gnolith_status" }, { name: "gnolith_read" }] }
+            result: { tools: alembic.WORKSHOP_TOOL_NAMES.map((name) => ({ name })) }
           }
         };
       }
@@ -203,13 +271,49 @@ try {
         response: {
           jsonrpc: "2.0",
           id: 1,
-          result: { structuredContent: workshopStatus }
+          result: { structuredContent: status }
         }
       };
     }
+  });
+  const workshopTransport = workshopTransportFor(workshopStatus);
+  semanticReceiptOverride = {
+    fingerprint: "0".repeat(64),
+    revision: 1,
+    state: "ready"
   };
-  const receipt = await alembic.applyPlan(plan, { seedbed, workshopTransport });
+  await assert.rejects(
+    alembic.applyPlan(plan, { seedbed, workshopTransport }),
+    /Seedbed semantic receipt differs/u
+  );
+  semanticReceiptOverride = null;
+  const receipt = await alembic.resumeOperation(projectRoot, plan.operationId, {
+    seedbed,
+    workshopTransport
+  });
   assert.equal(receipt.state, "activation-required");
+  assert.deepEqual(receipt.semanticVerification, workshopStatus.semanticState);
+  const verificationInput = {
+    endpoint: docker.endpoint,
+    mode: "docker-local",
+    authentication: { kind: "environment", variable: "GNOLITH_BEARER_TOKEN" },
+    expected,
+    semanticProfile: plan.semanticProfile,
+    protectedFile: packedSeedbedReceipt(seedbedPlan).protectedTokenFile
+  };
+  for (const semanticState of [
+    { ...workshopStatus.semanticState, fingerprint: "0".repeat(64) },
+    { ...workshopStatus.semanticState, revision: 2 },
+    { ...workshopStatus.semanticState, state: "degraded", ready: false }
+  ]) {
+    await assert.rejects(
+      alembic.verifyWorkshop({
+        ...verificationInput,
+        transport: workshopTransportFor({ ...workshopStatus, semanticState })
+      }),
+      /semantic|status mismatch/u
+    );
+  }
   assert.equal(fetchCalls, 0);
   const stoppedTransport = {
     async call() {
@@ -306,7 +410,7 @@ try {
   assert.equal(listed.result.tools.length, 9);
   assert.equal(listed.result.tools.some(({ name }) => name.startsWith("gnolith_")), false);
   assert.equal(fetchCalls, 0);
-  process.stdout.write("packed exact Alembic+Seedbed local selector, trust, no-pull, apply, and nine-tool smoke passed\n");
+  process.stdout.write("packed exact Alembic+Seedbed semantic plan/apply/repair, final Workshop-52 verification, no-pull, and nine-tool Alembic smoke passed\n");
 } finally {
   await rm(root, { recursive: true, force: true });
 }

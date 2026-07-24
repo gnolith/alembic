@@ -12,7 +12,11 @@ import {
   approveEndpoint,
   TOOL_CATALOG,
   TOOL_NAMES,
-  SEEDBED_LOCAL_BUILD_TRUST
+  SEEDBED_LOCAL_BUILD_TRUST,
+  WORKSHOP_CATALOG_DIGEST,
+  WORKSHOP_MIGRATION_SCHEMA_VERSION,
+  WORKSHOP_OPERATION_SCHEMA_VERSION,
+  WORKSHOP_TOOL_NAMES
 } from "../src/index.js";
 import { temporaryProject } from "./helpers.js";
 
@@ -21,6 +25,30 @@ test("fixed catalog contains only nine bounded Alembic operations", () => {
   assert.equal(TOOL_CATALOG.length, 9);
   assert.equal(TOOL_CATALOG.some(({ name }) => /gnolith|search|knowledge|query/u.test(name)), false);
   assert.equal(TOOL_CATALOG.every(({ inputSchema }) => inputSchema.additionalProperties === false), true);
+});
+
+test("runtime Workshop verification exactly matches the final public candidate lock", async () => {
+  const lock = JSON.parse(await readFile(join(process.cwd(), "candidate-lock.json"), "utf8")) as {
+    workshop: {
+      commit: string;
+      sha256: string;
+      migrationSchema: number;
+      operationSchema: number;
+      catalogSize: number;
+      catalogDigest: string;
+      containerWorkdir: string;
+    };
+  };
+  assert.equal(lock.workshop.commit, "abbdb1c3f07d8466883c9f00ad3927c81ca78769");
+  assert.equal(lock.workshop.sha256, "6d466fa1f91ba93efe070dada9ad8b1e14bde6b4d9cc7e94bdefcb3f25fe95d4");
+  assert.equal(lock.workshop.migrationSchema, WORKSHOP_MIGRATION_SCHEMA_VERSION);
+  assert.equal(lock.workshop.operationSchema, WORKSHOP_OPERATION_SCHEMA_VERSION);
+  assert.equal(lock.workshop.catalogSize, WORKSHOP_TOOL_NAMES.length);
+  assert.equal(lock.workshop.catalogDigest, WORKSHOP_CATALOG_DIGEST);
+  assert.equal(lock.workshop.containerWorkdir, "/app");
+  assert.equal(WORKSHOP_TOOL_NAMES.length, 52);
+  assert.equal(new Set(WORKSHOP_TOOL_NAMES).size, 52);
+  assert.equal(WORKSHOP_TOOL_NAMES.includes("authorization_admin"), true);
 });
 
 test("runtime Seedbed local-build trust exactly matches the public candidate lock", async () => {

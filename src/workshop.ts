@@ -18,6 +18,65 @@ import {
   type WorkshopVerification
 } from "./types.js";
 
+export const WORKSHOP_MIGRATION_SCHEMA_VERSION = 11 as const;
+export const WORKSHOP_OPERATION_SCHEMA_VERSION = 2 as const;
+export const WORKSHOP_CATALOG_DIGEST =
+  "a57799a792a075a5e359567240a7241a48df4155fae3a9e73b092ccf9035955b" as const;
+export const WORKSHOP_TOOL_NAMES = [
+  "gnolith_status",
+  "authorization_admin",
+  "search",
+  "search_hydrate",
+  "search_admin",
+  "get_entity",
+  "entity_history",
+  "statement_history",
+  "get_entities",
+  "create_item",
+  "create_property",
+  "mutate_entity",
+  "entity_revision",
+  "statement_revision",
+  "export_entity_json",
+  "create_resource",
+  "get_resource",
+  "update_resource",
+  "delete_resource",
+  "resource_history",
+  "resource_revision",
+  "hydrate_resource",
+  "create_annotation",
+  "get_annotation",
+  "update_annotation",
+  "delete_annotation",
+  "annotation_history",
+  "annotation_revision",
+  "validate_sparql",
+  "query_sparql",
+  "list_tasks",
+  "search_tasks",
+  "get_task",
+  "get_task_packet",
+  "create_task",
+  "update_task",
+  "archive_task",
+  "claim_task",
+  "release_task",
+  "complete_task",
+  "task_history",
+  "list_memories",
+  "get_memory",
+  "upsert_memory",
+  "delete_memory",
+  "memory_history",
+  "list_prompts",
+  "get_prompt",
+  "create_prompt",
+  "update_prompt",
+  "delete_prompt",
+  "prompt_history"
+] as const;
+
 interface RpcResponse {
   jsonrpc: "2.0";
   id: number;
@@ -137,8 +196,7 @@ function compareStatus(
   invariant(
     exactKeys(observed.migrationReadiness, ["namespace", "version", "ready"]) &&
       exactKeys(observed.compatibility, ["diamond", "taproot"]) &&
-      (exactKeys(observed.semanticState, ["state", "configured"]) ||
-        exactKeys(observed.semanticState, ["state", "configured", "revision", "fingerprint", "ready"])) &&
+      exactKeys(observed.semanticState, ["state", "configured", "revision", "fingerprint", "ready"]) &&
       exactKeys(observed.producers, ["ready", "fingerprint", "kinds"]) &&
       exactKeys(observed.versions, ["server", "operationSchema"]) &&
       [observed.installationId, observed.baseIri, observed.principalId, observed.credentialId,
@@ -146,10 +204,9 @@ function compareStatus(
       (observed.activeWorkspaceId === null || (typeof observed.activeWorkspaceId === "string" && observed.activeWorkspaceId.length > 0)) &&
       ["ready", "degraded", "unconfigured"].includes(observed.semanticState.state) &&
       observed.semanticState.configured === (observed.semanticState.state !== "unconfigured") &&
-    observed.migrationReadiness.namespace === "@gnolith/workshop" &&
-      Number.isInteger(observed.migrationReadiness.version) &&
-      observed.migrationReadiness.version > 0 &&
-      observed.versions.operationSchema === 9 &&
+      observed.migrationReadiness.namespace === "@gnolith/workshop" &&
+      observed.migrationReadiness.version === WORKSHOP_MIGRATION_SCHEMA_VERSION &&
+      observed.versions.operationSchema === WORKSHOP_OPERATION_SCHEMA_VERSION &&
       Number.isInteger(observed.authorizationRevision) &&
       observed.authorizationRevision >= 0 &&
       observed.compatibility.diamond &&
@@ -157,7 +214,8 @@ function compareStatus(
       uniqueStrings(observed.capabilities) &&
       uniqueStrings(observed.producers.kinds) &&
       canonicalJson([...observed.producers.kinds].sort()) === canonicalJson(["memory", "prompt", "task"]) &&
-      /^[0-9a-f]{64}$/u.test(observed.operationCatalogDigest),
+      observed.operationCatalogDigest === WORKSHOP_CATALOG_DIGEST &&
+      validSemanticState(observed.semanticState),
     "invalid-status-shape",
     "gnolith_status nested evidence violates the pinned Workshop schema"
   );
@@ -200,7 +258,30 @@ function compareStatus(
       "semantic-status-mismatch",
       "Workshop semantic fingerprint, revision, or state differs from the approved profile"
     );
+    invariant(
+      semanticProfile.providerKind !== "ollama-compatible" ||
+        observed.semanticState.state !== "ready",
+      "semantic-ollama-artifact-unavailable",
+      "Ollama semantics cannot be verified ready without an immutable model artifact"
+    );
   }
+}
+
+function validSemanticState(value: WorkshopStatusOutput["semanticState"]): boolean {
+  if (value.state === "unconfigured") {
+    return value.configured === false &&
+      value.revision === null &&
+      value.fingerprint === null &&
+      value.ready === false;
+  }
+  return value.configured === true &&
+    Number.isInteger(value.revision) &&
+    value.revision !== null &&
+    value.revision >= 1 &&
+    value.revision <= 1_000_000 &&
+    typeof value.fingerprint === "string" &&
+    /^[0-9a-f]{64}$/u.test(value.fingerprint) &&
+    value.ready === (value.state === "ready");
 }
 
 function uniqueStrings(values: readonly string[]): boolean {
@@ -274,6 +355,11 @@ export async function verifyWorkshop(input: {
     "Workshop catalog advertises a setup control-plane tool"
   );
   invariant(new Set(tools).size === tools.length, "duplicate-catalog", "Workshop catalog contains duplicate tool identities");
+  invariant(
+    canonicalJson(tools) === canonicalJson(WORKSHOP_TOOL_NAMES),
+    "workshop-catalog-mismatch",
+    "Workshop tools/list differs from the pinned 52-operation catalog"
+  );
   const statusResponse = await transport.call(
     endpoint,
     token,

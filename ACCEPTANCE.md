@@ -28,3 +28,4 @@
 | ALE-AR-024 | Packed exact Alembic+Seedbed plan/apply tests reject tampered selector/component-lock/graph evidence, observe no network pull, and smoke the fixed nine-tool MCP catalog. |
 | ALE-AR-025 | Optional SemanticConfigurationV1 is normalized, fingerprint/profile-bound, selector-only, and rejects arbitrary private provider/vector targets. |
 | ALE-AR-026 | Completed local repair resumes only the recorded Seedbed operation and requires fresh authenticated Workshop verification; stopped and repair-failed outcomes are stable and redacted. |
+| ALE-AR-027 | Workshop verification pins migration schema 11, operation schema 2, the exact ordered 52-tool catalog and digest, and the five-field semantic status; Ollama without an immutable model artifact can be degraded but never ready. |

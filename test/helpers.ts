@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { canonicalJson, sha256 } from "../src/canonical.js";
 import { semanticFingerprint } from "../src/plans.js";
+import { WORKSHOP_CATALOG_DIGEST, WORKSHOP_TOOL_NAMES } from "../src/workshop.js";
 import type {
   DockerInstallationRequest,
   ExpectedWorkshopStatus,
@@ -23,8 +24,8 @@ export const expectedStatus: ExpectedWorkshopStatus = {
   installationId: "installation-test",
   baseIri: "https://example.test/base/",
   serverVersion: "0.5.0",
-  operationVersion: "9",
-  catalogDigest: "577cc1de501b0ae3556eb1d32e7dd516c70a09c5b6226d671cec312068fba3dd",
+  operationVersion: "2",
+  catalogDigest: WORKSHOP_CATALOG_DIGEST,
   migrationReady: true,
   canonicalReady: true,
   authorizationReady: true,
@@ -52,23 +53,29 @@ export const workshopStatus: WorkshopStatusOutput = {
   activeWorkspaceId: "primary",
   capabilities: ["gnolith:use"],
   authorizationRevision: 1,
-  migrationReadiness: { namespace: "@gnolith/workshop", version: 1, ready: true },
+  migrationReadiness: { namespace: "@gnolith/workshop", version: 11, ready: true },
   compatibility: { diamond: true, taproot: true },
   canonicalReady: true,
   authorizationReady: true,
   lexicalReady: true,
-  semanticState: { state: "ready", configured: true },
+  semanticState: {
+    state: "ready",
+    configured: true,
+    revision: 1,
+    fingerprint: "a".repeat(64),
+    ready: true
+  },
   producers: { ready: true, fingerprint: "producer-fingerprint", kinds: ["task", "memory", "prompt"] },
   blobReady: true,
-  versions: { server: "0.5.0", operationSchema: 9 },
-  operationCatalogDigest: "577cc1de501b0ae3556eb1d32e7dd516c70a09c5b6226d671cec312068fba3dd"
+  versions: { server: "0.5.0", operationSchema: 2 },
+  operationCatalogDigest: WORKSHOP_CATALOG_DIGEST
 };
 
 export class MockWorkshop implements WorkshopTransport {
   constructor(
     private readonly status = workshopStatus,
     private readonly identity = "gnolith",
-    private readonly tools = ["gnolith_status", "gnolith_read"]
+    private readonly tools: readonly string[] = WORKSHOP_TOOL_NAMES
   ) {}
   async call(_endpoint: URL, _token: string, method: string, _params?: unknown, _sessionId?: string) {
     if (method === "initialize") {

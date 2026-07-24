@@ -3,7 +3,7 @@
   "$id": "https://gnolith.dev/schemas/alembic/operation-v1.json",
   "type": "object",
   "additionalProperties": false,
-  "required": ["format", "operationId", "planId", "planDigest", "state", "startedAt", "updatedAt", "checkpoints", "projectRoot", "configBeforeDigest", "configAfterDigest", "endpoint", "authentication", "seedbed", "verificationDigest", "previousReceipt", "failureClassification", "message"],
+  "required": ["format", "operationId", "planId", "planDigest", "state", "startedAt", "updatedAt", "checkpoints", "projectRoot", "configBeforeDigest", "configAfterDigest", "endpoint", "authentication", "seedbed", "verificationDigest", "semanticVerification", "previousReceipt", "failureClassification", "message"],
   "properties": {
     "format": { "const": "gnolith-alembic-operation-v1" },
     "operationId": { "type": "string" },
@@ -20,6 +20,23 @@
     "authentication": { "enum": ["local-bearer-v1", "remote-oauth-v1"] },
     "seedbed": { "type": ["object", "null"] },
     "verificationDigest": { "type": ["string", "null"] },
+    "semanticVerification": {
+      "oneOf": [
+        { "type": "null" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["state", "configured", "revision", "fingerprint", "ready"],
+          "properties": {
+            "state": { "enum": ["ready", "degraded", "unconfigured"] },
+            "configured": { "type": "boolean" },
+            "revision": { "type": ["integer", "null"], "minimum": 1 },
+            "fingerprint": { "type": ["string", "null"], "pattern": "^[0-9a-f]{64}$" },
+            "ready": { "type": "boolean" }
+          }
+        }
+      ]
+    },
     "previousReceipt": { "type": ["string", "null"] },
     "failureClassification": { "enum": ["none", "workshop-stopped", "repair-failed"] },
     "message": { "type": "string" }
