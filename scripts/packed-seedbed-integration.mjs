@@ -53,7 +53,7 @@ try {
   assert.equal(workshopContract.OPERATION_SCHEMA_VERSION, 2);
   assert.equal(
     workshopContract.CATALOG_DIGEST,
-    "e2d1e0f09e4dbad786d14cb4a9dd86dbe56a64d274e252bbbb1956b2c8933c85"
+    "af455b4d6ab3560bca9c0ab48e9db7bd3cbcfa166ace875578d88d182069071f"
   );
   assert.deepEqual(
     workshopContract.operationCatalog.map(({ name }) => name),
@@ -95,7 +95,7 @@ try {
     baseIri: "https://example.test/packed/",
     serverVersion: "0.5.0",
     operationVersion: "2",
-    catalogDigest: "e2d1e0f09e4dbad786d14cb4a9dd86dbe56a64d274e252bbbb1956b2c8933c85",
+    catalogDigest: "af455b4d6ab3560bca9c0ab48e9db7bd3cbcfa166ace875578d88d182069071f",
     migrationReady: true,
     canonicalReady: true,
     authorizationReady: true,
