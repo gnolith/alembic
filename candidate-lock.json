@@ -43,7 +43,7 @@
     "sourcePackage": "@gnolith/codex-plugin@0.2.0",
     "migrationPackage": "@gnolith/codex-plugin",
     "version": "0.3.0",
-    "commit": "b96b298b5bdf1c23f9749b809f6a4905230ab32d",
+    "commit": "6e19682661274acb3d13c687059fc2a1474e8d4a",
     "artifact": "gnolith-codex-plugin-0.3.0.tgz",
     "bytes": 19135,
     "sha256": "25ec8458130527bbf71662e0dc2c9bea79c0311d6419370b7cfa246fd25ba89c"
