@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { execFile } from "node:child_process";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -16,7 +16,8 @@ const npmCommand = process.env.npm_execpath
 const npmPrefix = process.env.npm_execpath ? [process.env.npm_execpath] : [];
 const archive = resolve(process.argv[2] ?? "");
 assert.ok(archive, "Alembic package archive is required");
-const root = await mkdtemp(join(tmpdir(), "alembic-fresh-install-"));
+const createdRoot = await mkdtemp(join(tmpdir(), "alembic-fresh-install-"));
+const root = await realpath(createdRoot);
 const project = join(root, "project");
 const packageRoot = join(root, "node_modules", "@gnolith", "alembic");
 const seedbedRoot = join(packageRoot, "node_modules", "@gnolith", "seedbed");
@@ -98,5 +99,5 @@ try {
     maxBuffer: 20 * 1024 * 1024
   });
 } finally {
-  await rm(root, { recursive: true, force: true });
+  await rm(createdRoot, { recursive: true, force: true });
 }
