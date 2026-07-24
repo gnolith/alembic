@@ -56,9 +56,9 @@
             "format": { "const": "gnolith-alembic-semantic-profile-v1" },
             "revision": { "type": "integer", "minimum": 1 },
             "fingerprint": { "$ref": "#/$defs/digest" },
-            "providerKind": { "enum": ["ollama-v1", "openai-v1"] },
-            "vectorKind": { "enum": ["sqlite-v1", "qdrant-v1"] },
-            "providerEndpoint": { "type": ["string", "null"] },
+            "providerKind": { "enum": ["openai-compatible", "ollama-compatible"] },
+            "vectorKind": { "enum": ["sqlite", "qdrant"] },
+            "providerEndpoint": { "type": "string" },
             "vectorEndpoint": { "type": ["string", "null"] },
             "credentialSelectorIds": {
               "type": "array",

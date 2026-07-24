@@ -118,7 +118,7 @@ export interface DockerInstallationRequest {
   baseIri: string;
   endpoint: string;
   image: DockerImageSelection;
-  semantic?: SemanticConfigurationV1;
+  semantic?: SeedbedSemanticConfigurationV1;
   expected: ExpectedWorkshopStatus;
 }
 export interface SeedbedLocalBuildSelection {
@@ -142,47 +142,45 @@ export interface SemanticCredentialSelectorV1 {
   kind: "protected-file-v1";
   path: string;
 }
-export interface OllamaSemanticProviderV1 {
-  kind: "ollama-v1";
-  endpoint: string;
-  model: string;
-  modelDigest: string;
-  dimensions: number;
-  privateNetworkApproved: true;
-}
-export interface OpenAiSemanticProviderV1 {
-  kind: "openai-v1";
-  model: string;
-  dimensions: number;
-  credentialSelectorId: string;
-}
-export interface SqliteSemanticVectorV1 {
-  kind: "sqlite-v1";
-  dimensions: number;
-}
-export interface QdrantSemanticVectorV1 {
-  kind: "qdrant-v1";
-  endpoint: string;
-  collection: string;
-  dimensions: number;
-  privateNetworkApproved: true;
-  credentialSelectorId?: string;
-}
 export interface SemanticConfigurationV1 {
-  format: "gnolith-semantic-configuration-v1";
-  revision: number;
-  fingerprint: string;
-  provider: OllamaSemanticProviderV1 | OpenAiSemanticProviderV1;
-  vector: SqliteSemanticVectorV1 | QdrantSemanticVectorV1;
+  version: 1;
+  id: string;
+  name: string;
+  provider: {
+    kind: "openai-compatible" | "ollama-compatible";
+    endpoint: string;
+    model: string;
+    dimensions: number;
+    metric: "cosine" | "dot" | "euclid";
+    credentialSelector: string | null;
+    allowPrivateEndpoint: boolean;
+    redirectPolicy: "error";
+  };
+  vector:
+    | { kind: "sqlite" }
+    | {
+        kind: "qdrant";
+        endpoint: string;
+        collection: string;
+        credentialSelector: string | null;
+        allowPrivateEndpoint: boolean;
+        redirectPolicy: "error";
+      };
+}
+export interface SeedbedSemanticConfigurationV1 {
+  configuration: SemanticConfigurationV1;
+  expectedRevision: number;
   credentialSelectors: readonly SemanticCredentialSelectorV1[];
 }
+/* The redacted Alembic binding intentionally omits protected selector paths. */
 export interface SemanticPlanProfileV1 {
   format: "gnolith-alembic-semantic-profile-v1";
   revision: number;
   fingerprint: string;
+  configurationId: string;
   providerKind: SemanticConfigurationV1["provider"]["kind"];
   vectorKind: SemanticConfigurationV1["vector"]["kind"];
-  providerEndpoint: string | null;
+  providerEndpoint: string;
   vectorEndpoint: string | null;
   credentialSelectorIds: readonly string[];
 }

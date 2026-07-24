@@ -383,29 +383,33 @@ test("semantic planning binds a redacted profile and only approved Compose-priva
   const protectedCredential = await protectedToken(root);
   process.env.GNOLITH_BEARER_TOKEN = protectedCredential.token;
   const seedbed = new MockSeedbed(protectedCredential.path, protectedCredential.digest);
-  const unsignedSemantic = {
-    format: "gnolith-semantic-configuration-v1" as const,
-    revision: 3,
+  const configuration = {
+    version: 1 as const,
+    id: "semantic-main",
+    name: "Semantic Main",
     provider: {
-      kind: "ollama-v1" as const,
+      kind: "ollama-compatible" as const,
       endpoint: "http://ollama:11434",
       model: "nomic-embed-text",
-      modelDigest: "a".repeat(64),
       dimensions: 768,
-      privateNetworkApproved: true as const
+      metric: "cosine" as const,
+      credentialSelector: null,
+      allowPrivateEndpoint: true,
+      redirectPolicy: "error" as const
     },
     vector: {
-      kind: "qdrant-v1" as const,
+      kind: "qdrant" as const,
       endpoint: "http://qdrant:6333",
       collection: "gnolith-semantic",
-      dimensions: 768,
-      privateNetworkApproved: true as const
-    },
-    credentialSelectors: []
+      credentialSelector: null,
+      allowPrivateEndpoint: true,
+      redirectPolicy: "error" as const
+    }
   };
   const semantic = {
-    ...unsignedSemantic,
-    fingerprint: semanticFingerprint(unsignedSemantic)
+    configuration,
+    expectedRevision: 2,
+    credentialSelectors: []
   };
   const docker = {
     installationId: expectedStatus.installationId,
@@ -429,9 +433,10 @@ test("semantic planning binds a redacted profile and only approved Compose-priva
   assert.deepEqual(plan.semanticProfile, {
     format: "gnolith-alembic-semantic-profile-v1",
     revision: 3,
-    fingerprint: semantic.fingerprint,
-    providerKind: "ollama-v1",
-    vectorKind: "qdrant-v1",
+    fingerprint: semanticFingerprint(configuration),
+    configurationId: "semantic-main",
+    providerKind: "ollama-compatible",
+    vectorKind: "qdrant",
     providerEndpoint: "http://ollama:11434",
     vectorEndpoint: "http://qdrant:6333",
     credentialSelectorIds: []
@@ -445,7 +450,7 @@ test("semantic planning binds a redacted profile and only approved Compose-priva
         state: "ready",
         configured: true,
         revision: 3,
-        fingerprint: semantic.fingerprint,
+        fingerprint: semanticFingerprint(configuration),
         ready: true
       }
     })
@@ -454,9 +459,11 @@ test("semantic planning binds a redacted profile and only approved Compose-priva
 
   const badPrivate = {
     ...semantic,
-    provider: { ...semantic.provider, endpoint: "http://10.0.0.9:11434" }
+    configuration: {
+      ...semantic.configuration,
+      provider: { ...semantic.configuration.provider, endpoint: "http://10.0.0.9:11434" }
+    }
   };
-  badPrivate.fingerprint = semanticFingerprint(badPrivate);
   await assert.rejects(
     createPlan({
       ...request,
@@ -481,6 +488,58 @@ test("semantic planning binds a redacted profile and only approved Compose-priva
       }
     } as unknown as Parameters<typeof createPlan>[0], seedbed),
     /unapproved field/u
+  );
+
+  const publicSemantic = {
+    configuration: {
+      version: 1 as const,
+      id: "semantic-public",
+      name: "Semantic Public",
+      provider: {
+        kind: "openai-compatible" as const,
+        endpoint: "https://api.example.test/v1/",
+        model: "text-embedding-model",
+        dimensions: 1536,
+        metric: "cosine" as const,
+        credentialSelector: "openai-api-key",
+        allowPrivateEndpoint: false,
+        redirectPolicy: "error" as const
+      },
+      vector: { kind: "sqlite" as const }
+    },
+    expectedRevision: 0,
+    credentialSelectors: [{
+      id: "openai-api-key",
+      kind: "protected-file-v1" as const,
+      path: protectedCredential.path
+    }]
+  };
+  const publicPlan = await createPlan({
+    ...request,
+    docker: { ...docker, semantic: publicSemantic }
+  }, seedbed);
+  assert.equal(publicPlan.semanticProfile?.providerEndpoint, "https://api.example.test/v1");
+  assert.deepEqual(publicPlan.semanticProfile?.credentialSelectorIds, ["openai-api-key"]);
+  assert.equal(JSON.stringify(publicPlan.semanticProfile).includes(protectedCredential.path), false);
+
+  await assert.rejects(
+    createPlan({
+      ...request,
+      docker: {
+        ...docker,
+        semantic: {
+          ...publicSemantic,
+          configuration: {
+            ...publicSemantic.configuration,
+            provider: {
+              ...publicSemantic.configuration.provider,
+              endpoint: "https://192.168.1.40/v1"
+            }
+          }
+        }
+      }
+    }, seedbed),
+    /public endpoint/u
   );
 
   const changed = {

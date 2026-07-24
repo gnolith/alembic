@@ -2,6 +2,7 @@ import { mkdtemp, mkdir, realpath, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { canonicalJson, sha256 } from "../src/canonical.js";
+import { semanticFingerprint } from "../src/plans.js";
 import type {
   DockerInstallationRequest,
   ExpectedWorkshopStatus,
@@ -152,8 +153,8 @@ export class MockSeedbed implements SeedbedControl {
       ...(plan.request.semantic
         ? {
             semantic: {
-              fingerprint: plan.request.semantic.fingerprint,
-              revision: plan.request.semantic.revision,
+              fingerprint: semanticFingerprint(plan.request.semantic.configuration),
+              revision: plan.request.semantic.expectedRevision + 1,
               state:
                 plan.request.expected.semanticState === "absent"
                   ? "unconfigured" as const
