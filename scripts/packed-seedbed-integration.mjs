@@ -130,9 +130,9 @@ try {
       kind: "seedbed-local-build-v1",
       selector: "gnolith-seedbed-local-build-v1",
       pullPolicy: "never",
-      componentLockSha256: "5dd530e3d33f4d8652ccc9070879b0e143391401b2b87efec8515c3ac9d364dd",
-      graphSha256: "a5e371d1dd4f839bfeee80734b21e68a11b21e423f4b7220b09194a3f71eaad1",
-      composeBundleSha256: "518607f10adb7c319b42ee6ef8987aa3ddf3b0264778ffa909b345d4b6d21500"
+      componentLockSha256: "751c2afd492336aab83e8ed5641561fbae9d190c5d69b31b1e65b700ee082ca4",
+      graphSha256: "b2dd029e70fc77859640d7c619776bbdb08e93ea6164641faea6fa966f083ab7",
+      composeBundleSha256: "55a0b0aed5fd66c74d3c9cdf2e21155843181e5b84a3d79aa364827cb5ff66de"
     },
     semantic: {
       configuration: semanticConfiguration,
@@ -228,7 +228,7 @@ try {
       baseIri: "https://example.test/packed"
     }
   });
-  assert.equal(plan.seedbedLocalBuildTrust.seedbedCandidateSha256, "eec1a3f7d94e43ddbcbd238b1d4b82128e39018958fe05bdcba1924a85983776");
+  assert.equal(plan.seedbedLocalBuildTrust.seedbedCandidateSha256, "5861febd801f5c3d8b8b02c1981f55fdbc39d81720b9f376b8c6bb1a83d0296d");
   assert.equal(plan.semanticProfile.fingerprint, semanticFingerprint);
   assert.equal(plan.semanticProfile.revision, 1);
   assert.equal(plan.semanticProfile.providerEndpoint, "http://host.docker.internal:43118/mock");
