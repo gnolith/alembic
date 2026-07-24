@@ -9,11 +9,17 @@ import { gunzipSync } from "node:zlib";
 const exec = promisify(execFile);
 const root = new URL("../", import.meta.url);
 const artifacts = new URL("../artifacts/", import.meta.url);
+const lock = JSON.parse(await readFile(new URL("../candidate-lock.json", import.meta.url)));
 
 const coordinates = {
-  seedbed: await requireCoordinate("SEEDBED_CANDIDATE", "SEEDBED_CANDIDATE_SHA256", "@gnolith/seedbed"),
-  workshop: await requireCoordinate("WORKSHOP_CANDIDATE", "WORKSHOP_CANDIDATE_SHA256", "@gnolith/workshop"),
-  legacy: await requireCoordinate("LEGACY_CANDIDATE", "LEGACY_CANDIDATE_SHA256", "@gnolith/codex-plugin")
+  seedbed: await requireCoordinate("SEEDBED_CANDIDATE", "SEEDBED_CANDIDATE_SHA256", lock.seedbed),
+  workshop: await requireCoordinate("WORKSHOP_CANDIDATE", "WORKSHOP_CANDIDATE_SHA256", lock.workshop),
+  legacy: await requireCoordinate("LEGACY_CANDIDATE", "LEGACY_CANDIDATE_SHA256", {
+    package: lock.legacy.migrationPackage,
+    version: lock.legacy.version,
+    bytes: lock.legacy.bytes,
+    sha256: lock.legacy.sha256
+  })
 };
 const { stdout: commit } = await exec("git", ["rev-parse", "HEAD"], { cwd: root });
 const { stdout: status } = await exec("git", ["status", "--porcelain", "--untracked-files=all"], { cwd: root });
@@ -85,18 +91,18 @@ await writeFile(
   ].join("\n") + "\n"
 );
 
-async function requireCoordinate(name, digestName, expectedName) {
+async function requireCoordinate(name, digestName, expected) {
   const coordinate = process.env[name];
   const sha256 = process.env[digestName];
-  if (!coordinate || !sha256 || !/^[0-9a-f]{64}$/.test(sha256)) {
+  if (!coordinate || !sha256 || sha256 !== expected.sha256) {
     throw new Error(`${name} and exact lowercase ${digestName} are required`);
   }
   if (!isAbsolute(coordinate)) throw new Error(`${name} must be an exact absolute candidate artifact selector`);
   const bytes = await readFile(coordinate);
   if (digest(bytes) !== sha256) throw new Error(`${name} bytes do not match ${digestName}`);
   const manifest = packageManifest(bytes);
-  if (manifest.name !== expectedName || typeof manifest.version !== "string") {
-    throw new Error(`${name} package identity is not ${expectedName}`);
+  if (manifest.name !== expected.package || manifest.version !== expected.version || bytes.byteLength !== expected.bytes) {
+    throw new Error(`${name} package identity/size differs from candidate lock`);
   }
   return {
     coordinate,

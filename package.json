@@ -29,7 +29,8 @@
     "SUPPORT.md",
     "CHANGELOG.md",
     "COMPATIBILITY.md",
-    "THREAT_MODEL.md"
+    "THREAT_MODEL.md",
+    "candidate-lock.json"
   ],
   "scripts": {
     "clean": "node scripts/clean.mjs",

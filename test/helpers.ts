@@ -22,8 +22,8 @@ export const expectedStatus: ExpectedWorkshopStatus = {
   installationId: "installation-test",
   baseIri: "https://example.test/base/",
   serverVersion: "0.5.0",
-  operationVersion: "1",
-  catalogDigest: "a".repeat(64),
+  operationVersion: "9",
+  catalogDigest: "577cc1de501b0ae3556eb1d32e7dd516c70a09c5b6226d671cec312068fba3dd",
   migrationReady: true,
   canonicalReady: true,
   authorizationReady: true,
@@ -40,7 +40,6 @@ export const workshopStatus: WorkshopStatusOutput = {
   principalId: "codex-assistant",
   credentialId: "credential-test",
   activeWorkspaceId: "primary",
-  workspaceIds: ["primary"],
   capabilities: ["gnolith:use"],
   authorizationRevision: 1,
   migrationReadiness: { namespace: "@gnolith/workshop", version: 1, ready: true },
@@ -51,8 +50,8 @@ export const workshopStatus: WorkshopStatusOutput = {
   semanticState: { state: "ready", configured: true },
   producers: { ready: true, fingerprint: "producer-fingerprint", kinds: ["task", "memory", "prompt"] },
   blobReady: true,
-  versions: { server: "0.5.0", operationSchema: 1 },
-  operationCatalogDigest: "a".repeat(64)
+  versions: { server: "0.5.0", operationSchema: 9 },
+  operationCatalogDigest: "577cc1de501b0ae3556eb1d32e7dd516c70a09c5b6226d671cec312068fba3dd"
 };
 
 export class MockWorkshop implements WorkshopTransport {

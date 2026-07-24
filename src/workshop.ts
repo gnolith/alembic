@@ -120,7 +120,7 @@ async function localToken(selector: ProtectedFileSelector): Promise<string> {
 function compareStatus(observed: WorkshopStatusOutput, expected: ExpectedWorkshopStatus): void {
   const exact = [
     "installationId", "baseIri", "principalId", "credentialId", "activeWorkspaceId",
-    "workspaceIds", "capabilities", "authorizationRevision", "migrationReadiness",
+    "capabilities", "authorizationRevision", "migrationReadiness",
     "compatibility", "canonicalReady", "authorizationReady", "lexicalReady",
     "semanticState", "producers", "blobReady", "versions", "operationCatalogDigest"
   ];
@@ -143,12 +143,11 @@ function compareStatus(observed: WorkshopStatusOutput, expected: ExpectedWorksho
     observed.migrationReadiness.namespace === "@gnolith/workshop" &&
       Number.isInteger(observed.migrationReadiness.version) &&
       observed.migrationReadiness.version > 0 &&
-      observed.versions.operationSchema === 1 &&
+      observed.versions.operationSchema === 9 &&
       Number.isInteger(observed.authorizationRevision) &&
       observed.authorizationRevision >= 0 &&
       observed.compatibility.diamond &&
       observed.compatibility.taproot &&
-      uniqueStrings(observed.workspaceIds) &&
       uniqueStrings(observed.capabilities) &&
       uniqueStrings(observed.producers.kinds) &&
       canonicalJson([...observed.producers.kinds].sort()) === canonicalJson(["memory", "prompt", "task"]) &&

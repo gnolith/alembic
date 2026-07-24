@@ -75,7 +75,6 @@ export interface WorkshopStatusOutput {
   principalId: string;
   credentialId: string;
   activeWorkspaceId: string | null;
-  workspaceIds: readonly string[];
   capabilities: readonly string[];
   authorizationRevision: number;
   migrationReadiness: { namespace: "@gnolith/workshop"; version: number; ready: boolean };
@@ -86,7 +85,7 @@ export interface WorkshopStatusOutput {
   semanticState: { state: "ready" | "degraded" | "unconfigured"; configured: boolean };
   producers: { ready: boolean; fingerprint: string; kinds: readonly ("task" | "memory" | "prompt")[] };
   blobReady: boolean;
-  versions: { server: string; operationSchema: 1 };
+  versions: { server: string; operationSchema: 9 };
   operationCatalogDigest: string;
 }
 
