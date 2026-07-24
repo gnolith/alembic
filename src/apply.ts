@@ -4,7 +4,8 @@ import { AlembicError, invariant } from "./errors.js";
 import { currentConfigDigest } from "./project.js";
 import { canonicalDirectory } from "./canonical.js";
 import { OperationStore } from "./store.js";
-import { verifyPlan } from "./plans.js";
+import { validateWaystoneEvidence, verifyPlan } from "./plans.js";
+import { boundedSeedbedCall, SEEDBED_MUTATION_DEADLINE_MS } from "./seedbed-call.js";
 import {
   type AlembicPlan,
   type AlembicReceipt,
@@ -18,6 +19,7 @@ export interface ApplyDependencies {
   seedbed?: SeedbedControl;
   oauthHost?: OAuthHost;
   workshopTransport?: WorkshopTransport;
+  seedbedDeadlineMs?: number;
 }
 
 function initialReceipt(plan: AlembicPlan): AlembicReceipt {
@@ -103,6 +105,18 @@ export async function applyPlan(
   try {
     if (plan.mode === "docker-local" && plan.action !== "remove") {
       receipt = await checkpoint(store, receipt, "seedbed", "before");
+      if (plan.action !== "adopt") {
+        invariant(plan.seedbedPlan !== null, "seedbed-plan-missing", "Approved Seedbed plan is absent");
+        receipt = {
+          ...receipt,
+          seedbed: {
+            version: "0.4.0",
+            digest: plan.seedbedPlan.digest,
+            operationId: plan.seedbedPlan.id
+          }
+        };
+        await store.writeReceipt(receipt);
+      }
       if (plan.action === "adopt") {
         invariant(plan.legacyAdoption !== null, "legacy-offline-adoption", "Legacy adoption receipt is absent");
         seedbedReceipt = {
@@ -121,8 +135,16 @@ export async function applyPlan(
         invariant(dependencies.seedbed !== undefined && plan.seedbedPlan !== null,
           "seedbed-required", "Seedbed dependency and plan are required");
         seedbedReceipt = resume && receipt.seedbed
-          ? await dependencies.seedbed.resume(receipt.seedbed.operationId)
-          : await dependencies.seedbed.apply(plan.seedbedPlan);
+          ? await boundedSeedbedCall(
+              "resume",
+              dependencies.seedbedDeadlineMs ?? SEEDBED_MUTATION_DEADLINE_MS,
+              (options) => dependencies.seedbed!.resume(receipt.seedbed!.operationId, options)
+            )
+          : await boundedSeedbedCall(
+              "apply",
+              dependencies.seedbedDeadlineMs ?? SEEDBED_MUTATION_DEADLINE_MS,
+              (options) => dependencies.seedbed!.apply(plan.seedbedPlan!, options)
+            );
       }
       invariant(seedbedReceipt.state === "ready", "seedbed-incomplete", "Seedbed did not produce a ready receipt");
       invariant(
@@ -158,6 +180,14 @@ export async function applyPlan(
         "Seedbed protected credential selector is invalid"
       );
       validateSeedbedSemanticReceipt(plan, seedbedReceipt);
+      if (plan.seedbedPlan !== null) {
+        validateWaystoneEvidence(seedbedReceipt.waystone);
+        invariant(
+          canonicalJson(seedbedReceipt.waystone) === canonicalJson(plan.seedbedPlan.waystone),
+          "seedbed-waystone-mismatch",
+          "Seedbed Waystone receipt differs from the approved /app asset and reserved-route evidence"
+        );
+      }
       receipt = {
         ...receipt,
         seedbed: {
@@ -233,10 +263,12 @@ export async function applyPlan(
     return receipt;
   } catch (error) {
     const prerequisite = error instanceof AlembicError && error.code === "activation-prerequisite";
+    const seedbedTimeout = error instanceof AlembicError && error.code.startsWith("seedbed-") &&
+      error.code.endsWith("-timeout");
     const failed: AlembicReceipt = {
       ...receipt,
       state: prerequisite ? "activation-prerequisite" : "failed",
-      failureClassification: "none",
+      failureClassification: seedbedTimeout ? "seedbed-timeout" : "none",
       updatedAt: new Date().toISOString(),
       message:
         error instanceof AlembicError
@@ -270,18 +302,25 @@ async function repairCompletedLocalPlan(
   let receipt = await checkpoint(store, existing, "seedbed-repair", "before");
   let seedbedReceipt;
   try {
-    seedbedReceipt = await dependencies.seedbed.resume(existing.seedbed.operationId);
+    seedbedReceipt = await boundedSeedbedCall(
+      "resume",
+      dependencies.seedbedDeadlineMs ?? SEEDBED_MUTATION_DEADLINE_MS,
+      (options) => dependencies.seedbed!.resume(existing.seedbed!.operationId, options)
+    );
     validateSeedbedReceipt(plan, seedbedReceipt);
-  } catch {
+  } catch (error) {
+    const seedbedTimeout = error instanceof AlembicError && error.code === "seedbed-resume-timeout";
     const failed: AlembicReceipt = {
       ...receipt,
       state: "failed",
       updatedAt: new Date().toISOString(),
-      failureClassification: "repair-failed",
-      message: "Recorded Seedbed repair failed; diagnose and resume this exact operation"
+      failureClassification: seedbedTimeout ? "seedbed-timeout" : "repair-failed",
+      message: seedbedTimeout
+        ? "Recorded Seedbed repair timed out; diagnose and resume this exact operation"
+        : "Recorded Seedbed repair failed; diagnose and resume this exact operation"
     };
     await store.writeReceipt(failed);
-    throw new AlembicError("seedbed-repair-failed", failed.message);
+    throw new AlembicError(seedbedTimeout ? "seedbed-timeout" : "seedbed-repair-failed", failed.message);
   }
   receipt = await checkpoint(store, receipt, "seedbed-repair", "after");
   receipt = await checkpoint(store, receipt, "workshop-repair-verification", "before");
@@ -357,6 +396,12 @@ function validateSeedbedReceipt(
     "Seedbed protected credential selector is invalid"
   );
   validateSeedbedSemanticReceipt(plan, seedbedReceipt);
+  validateWaystoneEvidence(seedbedReceipt.waystone);
+  invariant(
+    canonicalJson(seedbedReceipt.waystone) === canonicalJson(plan.seedbedPlan.waystone),
+    "seedbed-waystone-mismatch",
+    "Seedbed Waystone repair evidence differs from the approved /app asset and reserved-route evidence"
+  );
 }
 
 function validateSeedbedSemanticReceipt(

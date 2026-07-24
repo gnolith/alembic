@@ -7,11 +7,21 @@ import { inspectLegacyBundle } from "./legacy.js";
 import { createPlan } from "./plans.js";
 import { attestProject } from "./project.js";
 import { OperationStore } from "./store.js";
+import {
+  boundedOperation,
+  boundedSeedbedCall,
+  LEGACY_INSPECT_DEADLINE_MS,
+  SEEDBED_DIAGNOSE_DEADLINE_MS,
+  SEEDBED_PLAN_DEADLINE_MS
+} from "./seedbed-call.js";
 import type { AlembicPlan, HostMetadataV1, PlanRequest, SeedbedControl } from "./types.js";
 
 export interface ControlPlaneDependencies extends ApplyDependencies {
   seedbed?: SeedbedControl;
   seedbedFactory?: (projectRoot: string, approvedStateRoot?: string) => SeedbedControl;
+  planDeadlineMs?: number;
+  diagnoseDeadlineMs?: number;
+  legacyInspectDeadlineMs?: number;
 }
 
 export class AlembicControlPlane {
@@ -66,7 +76,11 @@ export class AlembicControlPlane {
 
   async plan(request: PlanRequest): Promise<AlembicPlan> {
     const project = await attestProject(request);
-    return createPlan(request, this.seedbedFor(project.root, request.seedbedStateRoot));
+    return createPlan(
+      request,
+      this.seedbedFor(project.root, request.seedbedStateRoot),
+      this.dependencies.planDeadlineMs ?? SEEDBED_PLAN_DEADLINE_MS
+    );
   }
 
   async apply(input: {
@@ -127,13 +141,31 @@ export class AlembicControlPlane {
       };
     }
     let seedbed = null;
+    let seedbedTimedOut = false;
     const seedbedControl = this.seedbedFor(inspection.project.root, input.seedbedStateRoot);
     if (input.installationId && seedbedControl) {
-      seedbed = await seedbedControl.diagnose({
-        installationId: input.installationId,
-        projectRoot: inspection.project.root
-      });
+      const installationId = input.installationId;
+      try {
+        seedbed = await boundedSeedbedCall(
+          "diagnose",
+          this.dependencies.diagnoseDeadlineMs ?? SEEDBED_DIAGNOSE_DEADLINE_MS,
+          (options) => seedbedControl.diagnose({
+            installationId,
+            projectRoot: inspection.project.root
+          }, options)
+        );
+      } catch (error) {
+        if (error instanceof Error && "code" in error && error.code === "seedbed-diagnose-timeout") {
+          seedbedTimedOut = true;
+        } else {
+          throw error;
+        }
+      }
     }
+    const seedbedStopped = seedbed !== null &&
+      (seedbed.classification === "local-workshop-unavailable" ||
+        (seedbed.classification.startsWith("local-installation-") &&
+          seedbed.classification !== "local-installation-ready"));
     return {
       format: "gnolith-alembic-diagnostic-v1",
       purpose: "bounded-redacted-diagnosis",
@@ -142,6 +174,10 @@ export class AlembicControlPlane {
           ? "workshop-stopped"
           : operation?.failureClassification === "repair-failed"
             ? "repair-failed"
+          : operation?.failureClassification === "seedbed-timeout" || seedbedTimedOut
+            ? "seedbed-timeout"
+          : seedbedStopped
+            ? "workshop-stopped"
         : inspection.conflict
           ? "config-conflict"
           : operation?.state === "activation-required" || operation?.state === "activation-prerequisite"
@@ -159,14 +195,22 @@ export class AlembicControlPlane {
       activationPending:
         operation?.state === "activation-required" || operation?.state === "activation-prerequisite",
       repair:
-        operation?.state === "failed" || operation?.state === "activation-prerequisite"
+        operation?.state === "failed" ||
+          operation?.state === "activation-prerequisite" ||
+          (seedbedTimedOut && operation?.seedbed != null)
           ? "resume-exact-operation"
           : seedbed?.repair?.kind === "seedbed-resume-operation-v1" &&
               seedbed.repair.action === "restart-recorded-compose" &&
               operation?.seedbed?.operationId === seedbed.repair.operationId
             ? "resume-exact-operation"
             : "none",
-      seedbed: seedbed
+      seedbed: seedbedTimedOut && input.installationId
+        ? {
+            installationId: input.installationId,
+            classification: "timeout",
+            repairBound: operation?.seedbed !== null
+          }
+        : seedbed
         ? {
             installationId: seedbed.installationId,
             classification: seedbed.classification,
@@ -190,6 +234,21 @@ export class AlembicControlPlane {
   }
 
   async legacyInspect(input: {
+    bundlePath: string;
+    taskDirectory: string;
+    confirmedProjectRoot?: string;
+    hostMetadata?: HostMetadataV1;
+    packageName: string;
+    packageVersion: string;
+  }) {
+    return boundedOperation(
+      "legacy-inspect",
+      this.dependencies.legacyInspectDeadlineMs ?? LEGACY_INSPECT_DEADLINE_MS,
+      () => this.inspectLegacyInput(input)
+    );
+  }
+
+  private async inspectLegacyInput(input: {
     bundlePath: string;
     taskDirectory: string;
     confirmedProjectRoot?: string;
@@ -245,7 +304,7 @@ export class AlembicControlPlane {
             bundleDigest: inspected.bundle.sha256,
             operationIds: inspected.bundle.receipts.map(({ operationId }) => operationId)
           }
-        }, this.dependencies.seedbed)
+        }, this.dependencies.seedbed, this.dependencies.planDeadlineMs ?? SEEDBED_PLAN_DEADLINE_MS)
       };
     }
     return {
@@ -276,7 +335,10 @@ export class AlembicControlPlane {
     return {
       ...(seedbed ? { seedbed } : {}),
       ...(this.dependencies.oauthHost ? { oauthHost: this.dependencies.oauthHost } : {}),
-      ...(this.dependencies.workshopTransport ? { workshopTransport: this.dependencies.workshopTransport } : {})
+      ...(this.dependencies.workshopTransport ? { workshopTransport: this.dependencies.workshopTransport } : {}),
+      ...(this.dependencies.seedbedDeadlineMs !== undefined
+        ? { seedbedDeadlineMs: this.dependencies.seedbedDeadlineMs }
+        : {})
     };
   }
 }

@@ -1,10 +1,11 @@
-import { canonicalJson, operationId, planId, sha256 } from "./canonical.js";
+import { canonicalBaseIri, canonicalJson, operationId, planId, sha256 } from "./canonical.js";
 import { isAbsolute, normalize, resolve } from "node:path";
 import { approveEndpoint } from "./endpoint.js";
 import { invariant } from "./errors.js";
 import { attestProject } from "./project.js";
 import { OperationStore } from "./store.js";
 import { verifyLegacyLocalAdoption } from "./legacy.js";
+import { boundedSeedbedCall, SEEDBED_PLAN_DEADLINE_MS } from "./seedbed-call.js";
 import {
   isDigestQualifiedImage,
   SEEDBED_LOCAL_BUILD_SELECTION,
@@ -19,7 +20,8 @@ import {
   type SemanticConfigurationV1,
   type SemanticPlanProfileV1,
   type SeedbedSemanticConfigurationV1,
-  type SeedbedControl
+  type SeedbedControl,
+  type WaystoneEvidenceV1
 } from "./types.js";
 
 const PLAN_LIFETIME_MS = 15 * 60 * 1000;
@@ -29,8 +31,24 @@ export const COMPATIBILITY = {
   workshop: "@gnolith/workshop@0.5.0",
   legacy: "@gnolith/codex-plugin@0.2.0"
 } as const;
+export const WAYSTONE_DEFAULT_EVIDENCE: WaystoneEvidenceV1 = {
+  enabled: true,
+  prefix: "/app",
+  manifestSha256: "f341c3fe00d3a93d9af6ca379453c02eb02287fa486847a5cf0764f1fef87a65",
+  entrypoint: {
+    path: "assets/waystone.css",
+    sha256: "6439decf9ad5245e1652da92d9547ad09e1a350ea97ab9b94fc6e6b632b66a7a",
+    bytes: 16_162,
+    mediaType: "text/css"
+  },
+  reservedPaths: ["/", "/mcp", "/health/live", "/health/ready"]
+};
 
-export async function createPlan(request: PlanRequest, seedbed?: SeedbedControl): Promise<AlembicPlan> {
+export async function createPlan(
+  request: PlanRequest,
+  seedbed?: SeedbedControl,
+  seedbedDeadlineMs = SEEDBED_PLAN_DEADLINE_MS
+): Promise<AlembicPlan> {
   validatePlanRequest(request);
   const normalized = normalizeRequest(request);
   const project = await attestProject(request);
@@ -40,7 +58,11 @@ export async function createPlan(request: PlanRequest, seedbed?: SeedbedControl)
     invariant(seedbed !== undefined, "seedbed-required", "Docker-local operations require Seedbed");
     invariant(normalized.docker !== undefined, "docker-request-required", "Docker installation request is required");
     invariant(normalized.docker.endpoint === endpoint.href.replace(/\/$/u, ""), "docker-endpoint-mismatch", "Seedbed endpoint differs from plan");
-    seedbedPlan = await seedbed.plan(normalized.docker);
+    seedbedPlan = await boundedSeedbedCall(
+      "plan",
+      seedbedDeadlineMs,
+      (options) => seedbed.plan(normalized.docker!, options)
+    );
     invariant(
       seedbedPlan.version === "gnolith-seedbed-control-plan-v2",
       "seedbed-version-mismatch",
@@ -64,6 +86,7 @@ export async function createPlan(request: PlanRequest, seedbed?: SeedbedControl)
       "seedbed-state-root",
       "Seedbed plan lacks its attested opaque external state selector"
     );
+    validateWaystoneEvidence(seedbedPlan.waystone);
   }
   if (normalized.action === "adopt" && normalized.mode === "docker-local") {
     invariant(normalized.legacyAdoption !== undefined && normalized.legacyEvidence !== undefined,
@@ -114,6 +137,38 @@ export async function createPlan(request: PlanRequest, seedbed?: SeedbedControl)
   return plan;
 }
 
+export function validateWaystoneEvidence(
+  evidence: WaystoneEvidenceV1 | undefined
+): asserts evidence is WaystoneEvidenceV1 {
+  invariant(evidence !== undefined, "waystone-default-missing", "Seedbed plan lacks the required default Waystone profile");
+  exactAllowedKeys(
+    evidence,
+    ["enabled", "prefix", "manifestSha256", "entrypoint", "reservedPaths"],
+    "Waystone evidence"
+  );
+  exactAllowedKeys(evidence.entrypoint, ["path", "sha256", "bytes", "mediaType"], "Waystone entrypoint");
+  const entrypointSegments = evidence.entrypoint.path.split("/");
+  invariant(
+      evidence.enabled === true &&
+      evidence.prefix === "/app" &&
+      /^[0-9a-f]{64}$/u.test(evidence.manifestSha256) &&
+      !evidence.entrypoint.path.startsWith("/") &&
+      evidence.entrypoint.path.endsWith(".css") &&
+      !/%|\\/u.test(evidence.entrypoint.path) &&
+      entrypointSegments.every((segment) => segment.length > 0 && segment !== "." && segment !== "..") &&
+      /^[0-9a-f]{64}$/u.test(evidence.entrypoint.sha256) &&
+      Number.isSafeInteger(evidence.entrypoint.bytes) &&
+      evidence.entrypoint.bytes > 0 &&
+      evidence.entrypoint.bytes <= 16 * 1024 * 1024 &&
+      evidence.entrypoint.mediaType === "text/css" &&
+      canonicalJson(evidence.reservedPaths) ===
+        canonicalJson(["/", "/mcp", "/health/live", "/health/ready"]) &&
+      canonicalJson(evidence) === canonicalJson(WAYSTONE_DEFAULT_EVIDENCE),
+    "waystone-default-invalid",
+    "Seedbed Waystone evidence differs from the required /app asset and reserved-route contract"
+  );
+}
+
 export function verifyPlan(plan: AlembicPlan): void {
   const { digest, ...unsigned } = plan;
   invariant(plan.format === "gnolith-alembic-plan-v1", "plan-format", "Unsupported plan format");
@@ -121,6 +176,7 @@ export function verifyPlan(plan: AlembicPlan): void {
   invariant(new Date(plan.expiresAt).getTime() > Date.now(), "plan-expired", "Plan has expired");
   invariant(plan.compatibility.alembic === ALEMBIC_VERSION, "plan-version", "Plan was made by another Alembic version");
   if (plan.seedbedPlan !== null) {
+    validateWaystoneEvidence(plan.seedbedPlan.waystone);
     invariant(
       canonicalJson(plan.seedbedPlan.request.image) === canonicalJson(SEEDBED_LOCAL_BUILD_SELECTION),
       "seedbed-local-build-selector-mismatch",
@@ -216,7 +272,19 @@ function validatePlanRequest(request: PlanRequest): void {
       "blobReady", "producerStatus", "semanticState", "allowLexicalOnly"
     ], "Docker expected Workshop status");
     invariant(
-      canonicalJson(request.docker.expected) === canonicalJson(request.expected),
+      request.docker.installationId === request.expected.installationId &&
+        canonicalBaseIri(request.docker.baseIri) === canonicalBaseIri(request.expected.baseIri),
+      "docker-identity-mismatch",
+      "Docker and Alembic expected canonical identities differ"
+    );
+    invariant(
+      canonicalJson({
+        ...request.docker.expected,
+        baseIri: canonicalBaseIri(request.docker.expected.baseIri)
+      }) === canonicalJson({
+        ...request.expected,
+        baseIri: canonicalBaseIri(request.expected.baseIri)
+      }),
       "docker-expected-mismatch",
       "Docker and Alembic expected Workshop evidence differ"
     );
@@ -244,6 +312,8 @@ function validatePlanRequest(request: PlanRequest): void {
     exactAllowedKeys(request.legacyEvidence, [
       "installationId", "baseIri", "domainCount", "payloadDigest", "catalogDigest", "ownerLedgerDigest"
     ], "legacy evidence");
+    invariant(validAbsoluteIri(request.legacyEvidence.baseIri),
+      "legacy-base-iri", "Legacy evidence base IRI is invalid");
   }
   if (request.legacyAdoption) {
     exactAllowedKeys(request.legacyAdoption, [
@@ -255,6 +325,8 @@ function validatePlanRequest(request: PlanRequest): void {
       ["kind", "canonicalPath", "credentialId", "sha256"],
       "protected credential selector"
     );
+    invariant(validAbsoluteIri(request.legacyAdoption.baseIri),
+      "legacy-base-iri", "Legacy adoption base IRI is invalid");
   }
 }
 
@@ -272,8 +344,8 @@ function validIdentifier(value: string): boolean {
 
 function validAbsoluteIri(value: string): boolean {
   try {
-    const iri = new URL(value);
-    return ["http:", "https:", "urn:"].includes(iri.protocol) && iri.username === "" && iri.password === "";
+    canonicalBaseIri(value);
+    return true;
   } catch {
     return false;
   }
@@ -291,7 +363,7 @@ function normalizeRequest(request: PlanRequest): PlanRequest {
       };
   const expected = {
     installationId: request.expected.installationId,
-    baseIri: request.expected.baseIri,
+    baseIri: canonicalBaseIri(request.expected.baseIri),
     serverVersion: request.expected.serverVersion,
     operationVersion: request.expected.operationVersion,
     catalogDigest: request.expected.catalogDigest,
@@ -319,7 +391,7 @@ function normalizeRequest(request: PlanRequest): PlanRequest {
   if (request.docker !== undefined) {
     normalized.docker = {
       installationId: request.docker.installationId,
-      baseIri: request.docker.baseIri,
+      baseIri: canonicalBaseIri(request.docker.baseIri),
       endpoint: request.docker.endpoint,
       image: { ...request.docker.image },
       ...(request.docker.semantic !== undefined
@@ -335,7 +407,7 @@ function normalizeRequest(request: PlanRequest): PlanRequest {
       operationId: request.legacyAdoption.operationId,
       state: request.legacyAdoption.state,
       installationId: request.legacyAdoption.installationId,
-      baseIri: request.legacyAdoption.baseIri,
+      baseIri: canonicalBaseIri(request.legacyAdoption.baseIri),
       domainCount: request.legacyAdoption.domainCount,
       payloadDigest: request.legacyAdoption.payloadDigest,
       catalogDigest: request.legacyAdoption.catalogDigest,
@@ -343,7 +415,12 @@ function normalizeRequest(request: PlanRequest): PlanRequest {
       protectedTokenFile: { ...request.legacyAdoption.protectedTokenFile }
     };
   }
-  if (request.legacyEvidence !== undefined) normalized.legacyEvidence = { ...request.legacyEvidence };
+  if (request.legacyEvidence !== undefined) {
+    normalized.legacyEvidence = {
+      ...request.legacyEvidence,
+      baseIri: canonicalBaseIri(request.legacyEvidence.baseIri)
+    };
+  }
   if (request.legacyHandoff !== undefined) {
     invariant(/^[0-9a-f]{64}$/u.test(request.legacyHandoff.bundleDigest),
       "legacy-handoff-digest", "Legacy handoff digest is invalid");
@@ -537,11 +614,12 @@ function validateSemanticEndpoint(
   const exactCompose = composeService === "ollama"
     ? isExactComposeEndpoint(value, "ollama", "11434")
     : composeService === "qdrant" && isExactComposeEndpoint(value, "qdrant", "6333");
-  if (allowPrivateEndpoint || exactCompose) {
+  const exactLoopback = isExactLoopbackEndpoint(value);
+  if (allowPrivateEndpoint || exactCompose || exactLoopback) {
     invariant(
-      allowPrivateEndpoint === true && exactCompose,
+      allowPrivateEndpoint === true && (exactCompose || exactLoopback),
       "semantic-private-endpoint-denied",
-      "Semantic private endpoint is not the explicitly approved Compose-local profile target"
+      "Semantic private endpoint is not an explicitly approved literal loopback or Compose-local target"
     );
     return;
   }
@@ -556,6 +634,22 @@ function validateSemanticEndpoint(
     "semantic-public-endpoint-denied",
     "Semantic public endpoint must be credential-free HTTPS with a public hostname"
   );
+}
+
+function isExactLoopbackEndpoint(value: string): boolean {
+  try {
+    const endpoint = new URL(value);
+    const hostname = endpoint.hostname.toLowerCase();
+    return ["http:", "https:"].includes(endpoint.protocol) &&
+      (hostname === "127.0.0.1" || hostname === "[::1]") &&
+      endpoint.port !== "" &&
+      endpoint.username === "" &&
+      endpoint.password === "" &&
+      endpoint.search === "" &&
+      endpoint.hash === "";
+  } catch {
+    return false;
+  }
 }
 
 function isPublicSemanticHostname(hostname: string): boolean {

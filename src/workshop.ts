@@ -1,7 +1,7 @@
 import { readFile, lstat, realpath } from "node:fs/promises";
 import { lookup } from "node:dns/promises";
 import { isAbsolute, normalize, resolve } from "node:path";
-import { canonicalJson, sha256 } from "./canonical.js";
+import { canonicalBaseIri, canonicalJson, sha256 } from "./canonical.js";
 import { approveEndpoint, assertDnsStable } from "./endpoint.js";
 import { invariant } from "./errors.js";
 import {
@@ -163,11 +163,7 @@ async function localToken(selector: ProtectedFileSelector): Promise<string> {
     invariant((info.mode & 0o077) === 0, "token-file-permissions", "Protected credential file is accessible by other users");
   }
   const bytes = await readFile(selector.canonicalPath);
-  invariant(bytes.byteLength <= 4096, "token-file-too-large", "Protected credential file exceeds 4 KiB");
-  let token = bytes.toString("utf8");
-  if (token.endsWith("\n")) token = token.slice(0, -1);
-  invariant(!token.includes("\r") && !token.includes("\n"), "invalid-token-file", "Protected token must be one base64url line");
-  invariant(/^[A-Za-z0-9_-]+$/u.test(token), "invalid-token-file", "Protected token is not canonical base64url text");
+  const token = canonicalBearerSecret(bytes);
   invariant(sha256(token) === selector.sha256, "token-digest-mismatch", "Protected credential digest mismatch");
   invariant(
     process.env[LOCAL_BEARER_ENV] === token,
@@ -177,11 +173,42 @@ async function localToken(selector: ProtectedFileSelector): Promise<string> {
   return token;
 }
 
+export function canonicalBearerSecret(bytes: Uint8Array): string {
+  invariant(bytes.byteLength <= 4096, "token-file-too-large", "Protected credential file exceeds 4 KiB");
+  let token: string;
+  try {
+    token = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+  } catch {
+    invariant(false, "invalid-token-file", "Protected token is not canonical UTF-8 text");
+  }
+  if (token.endsWith("\n")) token = token.slice(0, -1);
+  const hasControlCharacter = [...token].some((character) => {
+    const codePoint = character.codePointAt(0) ?? 0;
+    return codePoint <= 0x1f || codePoint === 0x7f;
+  });
+  invariant(
+    token.length > 0 &&
+      token === token.normalize("NFC") &&
+      token.trim() === token &&
+      !hasControlCharacter,
+    "invalid-token-file",
+    "Protected token must contain one canonical text secret with at most one terminal LF"
+  );
+  invariant(/^[A-Za-z0-9_-]+$/u.test(token), "invalid-token-file", "Protected token is not canonical base64url text");
+  return token;
+}
+
 function compareStatus(
   observed: WorkshopStatusOutput,
   expected: ExpectedWorkshopStatus,
   semanticProfile?: SemanticPlanProfileV1
 ): void {
+  let observedBaseIri: string;
+  try {
+    observedBaseIri = canonicalBaseIri(observed.baseIri);
+  } catch {
+    invariant(false, "invalid-status-shape", "gnolith_status base IRI is invalid");
+  }
   const exact = [
     "installationId", "baseIri", "principalId", "credentialId", "activeWorkspaceId",
     "capabilities", "authorizationRevision", "migrationReadiness",
@@ -221,7 +248,7 @@ function compareStatus(
   );
   const comparisons: Readonly<Record<string, [unknown, unknown]>> = {
     installationId: [observed.installationId, expected.installationId],
-    baseIri: [observed.baseIri, expected.baseIri],
+    baseIri: [observedBaseIri, canonicalBaseIri(expected.baseIri)],
     serverVersion: [observed.versions.server, expected.serverVersion],
     operationVersion: [String(observed.migrationReadiness.version), expected.operationVersion],
     catalogDigest: [observed.operationCatalogDigest, expected.catalogDigest],

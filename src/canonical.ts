@@ -11,6 +11,27 @@ export function canonicalJson(value: unknown): string {
   return JSON.stringify(normalizeValue(value));
 }
 
+export function canonicalBaseIri(value: string): string {
+  let iri: URL;
+  try {
+    iri = new URL(value);
+  } catch {
+    invariant(false, "base-iri-invalid", "Base IRI is not an absolute identity");
+  }
+  invariant(
+    ["http:", "https:", "urn:"].includes(iri.protocol) &&
+      iri.username === "" &&
+      iri.password === "" &&
+      iri.search === "" &&
+      iri.hash === "",
+    "base-iri-invalid",
+    "Base IRI must be an absolute credential-free HTTP(S) or URN identity without query or fragment"
+  );
+  const canonical = iri.href.normalize("NFC");
+  if (iri.protocol === "urn:") return canonical;
+  return canonical.replace(/\/+$/u, "");
+}
+
 function normalizeValue(value: unknown): unknown {
   if (typeof value === "string") return value.normalize("NFC");
   if (Array.isArray(value)) return value.map(normalizeValue);

@@ -16,7 +16,9 @@ import {
   WORKSHOP_CATALOG_DIGEST,
   WORKSHOP_MIGRATION_SCHEMA_VERSION,
   WORKSHOP_OPERATION_SCHEMA_VERSION,
-  WORKSHOP_TOOL_NAMES
+  WORKSHOP_TOOL_NAMES,
+  canonicalBaseIri,
+  canonicalBearerSecret
 } from "../src/index.js";
 import { temporaryProject } from "./helpers.js";
 
@@ -25,6 +27,22 @@ test("fixed catalog contains only nine bounded Alembic operations", () => {
   assert.equal(TOOL_CATALOG.length, 9);
   assert.equal(TOOL_CATALOG.some(({ name }) => /gnolith|search|knowledge|query/u.test(name)), false);
   assert.equal(TOOL_CATALOG.every(({ inputSchema }) => inputSchema.additionalProperties === false), true);
+});
+
+test("base identities and protected bearer text use one canonical spelling", () => {
+  assert.equal(canonicalBaseIri("HTTPS://EXAMPLE.TEST/base/"), "https://example.test/base");
+  assert.equal(canonicalBaseIri("https://example.test/base"), "https://example.test/base");
+  assert.equal(canonicalBearerSecret(Buffer.from("canonical_token_123\n")), "canonical_token_123");
+  assert.equal(canonicalBearerSecret(Buffer.from("canonical_token_123")), "canonical_token_123");
+  for (const invalid of [
+    "canonical_token_123\n\n",
+    "canonical_token_123\r\n",
+    " canonical_token_123\n",
+    "canonical_token_123 \n",
+    "canonical_token_123\u0000\n"
+  ]) {
+    assert.throws(() => canonicalBearerSecret(Buffer.from(invalid)), /canonical text secret/u);
+  }
 });
 
 test("runtime Workshop verification exactly matches the final public candidate lock", async () => {
@@ -39,8 +57,8 @@ test("runtime Workshop verification exactly matches the final public candidate l
       containerWorkdir: string;
     };
   };
-  assert.equal(lock.workshop.commit, "abbdb1c3f07d8466883c9f00ad3927c81ca78769");
-  assert.equal(lock.workshop.sha256, "6d466fa1f91ba93efe070dada9ad8b1e14bde6b4d9cc7e94bdefcb3f25fe95d4");
+  assert.equal(lock.workshop.commit, "66214d4cfb1072ad794e9f2c29acbac06ae52048");
+  assert.equal(lock.workshop.sha256, "f4b203a4c8606bc732ad4b859249b2d5eb63f8993435cb5f07100d401076e3c8");
   assert.equal(lock.workshop.migrationSchema, WORKSHOP_MIGRATION_SCHEMA_VERSION);
   assert.equal(lock.workshop.operationSchema, WORKSHOP_OPERATION_SCHEMA_VERSION);
   assert.equal(lock.workshop.catalogSize, WORKSHOP_TOOL_NAMES.length);

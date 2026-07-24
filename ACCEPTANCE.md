@@ -29,3 +29,8 @@
 | ALE-AR-025 | Optional SemanticConfigurationV1 is normalized, fingerprint/profile-bound, selector-only, and rejects arbitrary private provider/vector targets. |
 | ALE-AR-026 | Completed local repair resumes only the recorded Seedbed operation and requires fresh authenticated Workshop verification; stopped and repair-failed outcomes are stable and redacted. |
 | ALE-AR-027 | Workshop verification pins migration schema 11, operation schema 2, the exact ordered 52-tool catalog and digest, and the five-field semantic status; Ollama without an immutable model artifact can be degraded but never ready. |
+| ALE-AR-028 | Expected, Docker, Workshop, and legacy base IRIs use one pre-fingerprint canonical spelling; slash/no-slash replays converge and divergent identities fail closed. |
+| ALE-AR-029 | Seedbed plan/apply/resume/diagnose and legacy inspection have bounded deadlines; cancellation reaches the adapter, timeouts are stable/redacted/retryable, and stopped Workshop state outranks activation-pending. |
+| ALE-AR-030 | Explicit protected OpenAI-compatible literal-loopback profiles with SQLite are fingerprint/revision/state bound; DNS aliases, arbitrary private endpoints, redirects, query strings, and unprotected selectors fail closed. |
+| ALE-AR-031 | Default local Seedbed plan and receipt bind equal Waystone `/app` manifest, CSS entrypoint, and reserved-route evidence without giving Alembic UI ownership. |
+| ALE-AR-032 | Protected bearer files normalize at most one terminal LF and reject ambiguous whitespace, controls, malformed UTF-8, and non-base64url text without leaking values or paths. |
