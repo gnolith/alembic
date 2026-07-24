@@ -427,7 +427,7 @@ try {
         ...verificationInput,
         transport: workshopTransportFor({ ...workshopStatus, semanticState })
       }),
-      /semantic|status mismatch/u
+      /semantic|status mismatch|pinned Workshop schema/u
     );
   }
   assert.equal(fetchCalls, 0);
