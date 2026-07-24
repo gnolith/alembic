@@ -125,6 +125,7 @@ const report = {
     "npm run test:security",
     "npm run test:plugin",
     "npm run build",
+    "npm run test:install",
     "npm audit --omit=dev --audit-level=high",
     "npm pack --dry-run",
     "fresh offline packed install and bundled Seedbed local-control proof",

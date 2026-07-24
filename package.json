@@ -44,7 +44,8 @@
     "test": "npm run build:test && node --test --test-reporter=spec dist-test/test/core.test.js dist-test/test/apply.test.js dist-test/test/legacy.test.js dist-test/test/network.test.js",
     "test:security": "npm run build:test && node --test --test-reporter=spec dist-test/test/security-gates.test.js",
     "test:plugin": "npm run build:test && node --test --test-reporter=spec dist-test/test/plugin.test.js",
-    "gate": "npm run clean && npm ci && npm run lint && npm test && npm run test:security && npm run test:plugin && npm run build && npm audit --omit=dev --audit-level=high && npm pack --dry-run",
+    "test:install": "node scripts/packed-install-gate.mjs",
+    "gate": "npm run clean && npm ci && npm run lint && npm test && npm run test:security && npm run test:plugin && npm run build && npm run test:install && npm audit --omit=dev --audit-level=high && npm pack --dry-run",
     "candidate": "node scripts/candidate.mjs"
   },
   "dependencies": {
