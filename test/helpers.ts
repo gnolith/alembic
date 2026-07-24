@@ -40,9 +40,9 @@ export const localBuildSelection = {
   kind: "seedbed-local-build-v1" as const,
   selector: "gnolith-seedbed-local-build-v1" as const,
   pullPolicy: "never" as const,
-  componentLockSha256: "751c2afd492336aab83e8ed5641561fbae9d190c5d69b31b1e65b700ee082ca4",
-  graphSha256: "b2dd029e70fc77859640d7c619776bbdb08e93ea6164641faea6fa966f083ab7",
-  composeBundleSha256: "55a0b0aed5fd66c74d3c9cdf2e21155843181e5b84a3d79aa364827cb5ff66de"
+  componentLockSha256: "3a4af57aae27206b90c7f2f7db9cd72607b982aca5a9c5f44d7604ee7a00bc20",
+  graphSha256: "14011e9d051e6c310fdb47d4c65cd1dc8597b9906f802070cbdf4df849e5ce58",
+  composeBundleSha256: "7c3e0e3b7ca9d1ba7170c526092e3cd928560248396e37fa64daa5998e57fdc2"
 };
 
 export const workshopStatus: WorkshopStatusOutput = {
