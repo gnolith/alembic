@@ -94,7 +94,7 @@ try {
     installationId: "packed-integration",
     baseIri: "https://example.test/packed/",
     serverVersion: "0.5.0",
-    operationVersion: "2",
+    operationVersion: "11",
     catalogDigest: "a57799a792a075a5e359567240a7241a48df4155fae3a9e73b092ccf9035955b",
     migrationReady: true,
     canonicalReady: true,
@@ -119,14 +119,7 @@ try {
       allowPrivateEndpoint: false,
       redirectPolicy: "error"
     },
-    vector: {
-      kind: "qdrant",
-      endpoint: "http://qdrant:6333",
-      collection: "packed-semantic",
-      credentialSelector: null,
-      allowPrivateEndpoint: true,
-      redirectPolicy: "error"
-    }
+    vector: { kind: "sqlite" }
   };
   const semanticFingerprint = alembic.semanticFingerprint(semanticConfiguration);
   const docker = {
@@ -137,9 +130,9 @@ try {
       kind: "seedbed-local-build-v1",
       selector: "gnolith-seedbed-local-build-v1",
       pullPolicy: "never",
-      componentLockSha256: "b96cc5bfb4f73413e12d8cffd13dd8f9f97f3ca8ffffcefcd576176c521f3190",
-      graphSha256: "15ad77b7e178bd76f4ea32d1c1570f8d287caf52b6bd87bc286ffd36f2ad34a9",
-      composeBundleSha256: "2a0f1e69f9fb2a4aeb8e906c5db3aec091cfcf52d8af0be65088da251d38235a"
+      componentLockSha256: "d41872d741f1a6f0f5e10a5572e48b2a47851c143a515327b90acebddd258644",
+      graphSha256: "abf40b3390a7f3659810a74417708a0775cc190f22654cb253df488932b79896",
+      composeBundleSha256: "e856f03d669e80615f91b609eaee4d0ca37e3b86e424f803e47a4008e9727a36"
     },
     semantic: {
       configuration: semanticConfiguration,
@@ -216,7 +209,7 @@ try {
     docker
   }, seedbed);
   assert.deepEqual(plan.seedbedPlan.request, seedbedPlan.request);
-  assert.equal(plan.seedbedLocalBuildTrust.seedbedCandidateSha256, "6dff7d30c48e9c807dd81bbff9e2f650287b374997764c8e2a543f33232a284f");
+  assert.equal(plan.seedbedLocalBuildTrust.seedbedCandidateSha256, "5bf4142667ffad07c39d4da2e2861b80f0736c82f87f86135b2c7c4b8567a797");
   assert.equal(plan.semanticProfile.fingerprint, semanticFingerprint);
   assert.equal(plan.semanticProfile.revision, 1);
   assert.equal(JSON.stringify(plan.semanticProfile).includes(semanticCredentialPath), false);

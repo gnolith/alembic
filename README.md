@@ -28,8 +28,9 @@ Remote services are connect-existing only.
   selector-only, and reduced to a redacted plan profile. Only the exact
   profile-approved Compose hosts `ollama:11434` and `qdrant:6333` may use
   private HTTP; arbitrary private semantic targets are rejected. Protected
-  OpenAI-compatible profiles may verify ready with SQLite or Qdrant. Ollama
-  remains degraded unless a separately bound immutable model artifact exists.
+  OpenAI-compatible profiles may verify ready with SQLite, or with Qdrant when
+  Seedbed's immutable candidate enables that exact profile. Ollama remains
+  degraded unless a separately bound immutable model artifact exists.
 - Repair resumes only the recorded Seedbed operation. Alembic implements no
   restart behavior and reports activation-ready only after fresh authenticated
   Workshop identity, catalog, readiness, and status verification.
