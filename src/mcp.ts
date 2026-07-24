@@ -6,6 +6,7 @@ import { publicError } from "./canonical.js";
 import { TOOL_CATALOG } from "./tool-catalog.js";
 import type { PlanRequest } from "./types.js";
 import { loadDefaultSeedbedFactory } from "./seedbed.js";
+import { runIsolatedTool } from "./tool-isolation.js";
 
 interface JsonRpcRequest {
   jsonrpc: "2.0";
@@ -18,7 +19,7 @@ const seedbedFactory = await loadDefaultSeedbedFactory().catch(() => undefined);
 const control = new AlembicControlPlane(seedbedFactory ? { seedbedFactory } : {});
 const input = createInterface({ input: process.stdin });
 for await (const line of input) {
-  let request: JsonRpcRequest;
+  let request: JsonRpcRequest | undefined;
   try {
     request = JSON.parse(line) as JsonRpcRequest;
     const result = await handle(request);
@@ -28,8 +29,12 @@ for await (const line of input) {
     process.stdout.write(
       JSON.stringify({
         jsonrpc: "2.0",
-        id: null,
-        error: { code: -32000, message: safe.message, data: { classification: safe.code } }
+        id: request?.id ?? null,
+        error: {
+          code: -32000,
+          message: safe.message,
+          data: { ...safe.details, classification: safe.code }
+        }
       }) + "\n"
     );
   }
@@ -63,7 +68,7 @@ async function handle(request: JsonRpcRequest): Promise<unknown> {
     case "alembic_discover":
       return content(await control.discover(args as Parameters<typeof control.discover>[0]));
     case "alembic_plan":
-      return content(await control.plan(args.request as PlanRequest));
+      return content(await runIsolatedTool("plan", args.request as PlanRequest));
     case "alembic_apply":
       return content(await control.apply(args as Parameters<typeof control.apply>[0]));
     case "alembic_operation_read":
@@ -73,9 +78,9 @@ async function handle(request: JsonRpcRequest): Promise<unknown> {
     case "alembic_diagnose":
       return content(await control.diagnose(args as Parameters<typeof control.diagnose>[0]));
     case "alembic_legacy_inspect":
-      return content(await control.legacyInspect(args as Parameters<typeof control.legacyInspect>[0]));
+      return content(await runIsolatedTool("legacy-inspect", args));
     case "alembic_legacy_adopt":
-      return content(await control.legacyAdopt(args as Parameters<typeof control.legacyAdopt>[0]));
+      return content(await runIsolatedTool("legacy-adopt", args));
     default:
       throw new Error("Tool catalog exhaustiveness failure");
   }

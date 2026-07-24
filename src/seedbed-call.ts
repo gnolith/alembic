@@ -14,7 +14,7 @@ export async function boundedSeedbedCall<T>(
   return boundedOperation(
     `seedbed-${operation}`,
     deadlineMs,
-    (signal) => invoke({ signal, deadlineMs })
+    (signal) => invoke({ signal, timeoutMs: deadlineMs })
   );
 }
 

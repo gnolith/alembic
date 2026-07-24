@@ -20,6 +20,7 @@ import {
   canonicalBaseIri,
   canonicalBearerSecret
 } from "../src/index.js";
+import { runIsolatedTool } from "../src/tool-isolation.js";
 import { temporaryProject } from "./helpers.js";
 
 test("fixed catalog contains only nine bounded Alembic operations", () => {
@@ -43,6 +44,28 @@ test("base identities and protected bearer text use one canonical spelling", () 
   ]) {
     assert.throws(() => canonicalBearerSecret(Buffer.from(invalid)), /canonical text secret/u);
   }
+});
+
+test("isolated MCP tools retain a hard deadline when a dependency blocks", async () => {
+  const startedAt = Date.now();
+  for (const operation of ["plan", "legacy-inspect"] as const) {
+    await assert.rejects(
+      runIsolatedTool(operation, {}, {
+        deadlineMs: 50,
+        workerUrl: new URL("./hanging-worker.js", import.meta.url)
+      }),
+      (error) => {
+        assert.equal((error as { code?: string }).code, `${operation}-timeout`);
+        assert.deepEqual((error as { details?: unknown }).details, {
+          operation,
+          stage: "worker-start",
+          retryable: true
+        });
+        return true;
+      }
+    );
+  }
+  assert.equal(Date.now() - startedAt < 1_000, true);
 });
 
 test("runtime Workshop verification exactly matches the final public candidate lock", async () => {

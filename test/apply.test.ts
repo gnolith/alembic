@@ -747,7 +747,7 @@ test("semantic planning binds a redacted profile and only approved Compose-priva
       ...request,
       docker: { ...docker, semantic: badPrivate }
     }, seedbed),
-    /explicitly approved literal loopback or Compose-local target/u
+    /explicitly approved Docker host-gateway or Compose-local target/u
   );
   await assert.rejects(
     createPlan({
@@ -961,18 +961,31 @@ test("protected loopback OpenAI-compatible SQLite profile is accepted, redacted,
     expected: expectedStatus,
     docker
   };
+  const canonicalConfiguration = {
+    ...configuration,
+    provider: {
+      ...configuration.provider,
+      endpoint: "http://host.docker.internal:43117/mock"
+    }
+  };
+  const canonicalFingerprint = semanticFingerprint(canonicalConfiguration);
+  assert.equal(semanticFingerprint(configuration), canonicalFingerprint);
   const plan = await createPlan(request, seedbed);
   assert.deepEqual(plan.semanticProfile, {
     format: "gnolith-alembic-semantic-profile-v1",
     revision: 5,
-    fingerprint: semanticFingerprint(configuration),
+    fingerprint: canonicalFingerprint,
     configurationId: configuration.id,
     providerKind: "openai-compatible",
     vectorKind: "sqlite",
-    providerEndpoint: configuration.provider.endpoint,
+    providerEndpoint: canonicalConfiguration.provider.endpoint,
     vectorEndpoint: null,
     credentialSelectorIds: ["loopback-openai-key"]
   });
+  assert.equal(
+    plan.seedbedPlan?.request.semantic?.configuration.provider.endpoint,
+    canonicalConfiguration.provider.endpoint
+  );
   assert.doesNotMatch(JSON.stringify(plan.semanticProfile), new RegExp(protectedCredential.path.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&"), "u"));
   const receipt = await applyPlan(plan, {
     seedbed,
@@ -982,7 +995,7 @@ test("protected loopback OpenAI-compatible SQLite profile is accepted, redacted,
         state: "ready",
         configured: true,
         revision: 5,
-        fingerprint: semanticFingerprint(configuration),
+        fingerprint: canonicalFingerprint,
         ready: true
       }
     })
@@ -991,10 +1004,48 @@ test("protected loopback OpenAI-compatible SQLite profile is accepted, redacted,
     state: "ready",
     configured: true,
     revision: 5,
-    fingerprint: semanticFingerprint(configuration),
+    fingerprint: canonicalFingerprint,
     ready: true
   });
 
+  const localhostPlan = await createPlan({
+    ...request,
+    docker: {
+      ...docker,
+      semantic: {
+        ...semantic,
+        configuration: {
+          ...configuration,
+          provider: {
+            ...configuration.provider,
+            endpoint: "http://localhost:43117/mock"
+          }
+        }
+      }
+    }
+  }, seedbed);
+  assert.equal(localhostPlan.semanticProfile?.providerEndpoint, canonicalConfiguration.provider.endpoint);
+  assert.equal(localhostPlan.semanticProfile?.fingerprint, canonicalFingerprint);
+  assert.equal(localhostPlan.requestDigest, plan.requestDigest);
+  const ipv6Plan = await createPlan({
+    ...request,
+    docker: {
+      ...docker,
+      semantic: {
+        ...semantic,
+        configuration: {
+          ...configuration,
+          provider: {
+            ...configuration.provider,
+            endpoint: "http://[::1]:43117/mock"
+          }
+        }
+      }
+    }
+  }, seedbed);
+  assert.equal(ipv6Plan.semanticProfile?.providerEndpoint, canonicalConfiguration.provider.endpoint);
+  assert.equal(ipv6Plan.semanticProfile?.fingerprint, canonicalFingerprint);
+  assert.equal(ipv6Plan.requestDigest, plan.requestDigest);
   await assert.rejects(
     createPlan({
       ...request,
@@ -1006,13 +1057,13 @@ test("protected loopback OpenAI-compatible SQLite profile is accepted, redacted,
             ...configuration,
             provider: {
               ...configuration.provider,
-              endpoint: "http://localhost:43117/mock"
+              endpoint: "http://10.0.0.9:43117/mock"
             }
           }
         }
       }
     }, seedbed),
-    /literal loopback or Compose-local/u
+    /Docker host-gateway or Compose-local/u
   );
   await assert.rejects(
     createPlan({
@@ -1031,7 +1082,7 @@ test("protected loopback OpenAI-compatible SQLite profile is accepted, redacted,
         }
       }
     }, seedbed),
-    /literal loopback or Compose-local/u
+    /Docker host-gateway or Compose-local/u
   );
 });
 

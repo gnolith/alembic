@@ -154,6 +154,10 @@ try {
   const seedbedPlan = await exactSeedbed.plan(docker);
   assert.equal(seedbedPlan.request.image.selector, "gnolith-seedbed-local-build-v1");
   assert.equal(seedbedPlan.request.image.pullPolicy, "never");
+  assert.equal(
+    seedbedPlan.request.semantic.configuration.provider.endpoint,
+    "http://host.docker.internal:43118/mock"
+  );
 
   let semanticReceiptOverride = null;
   const packedSeedbedReceipt = (plan) => ({
@@ -227,6 +231,7 @@ try {
   assert.equal(plan.seedbedLocalBuildTrust.seedbedCandidateSha256, "5d62c83953bfb1a6a96294fe849a38187b723c1183334bf676f04192aa28f9ef");
   assert.equal(plan.semanticProfile.fingerprint, semanticFingerprint);
   assert.equal(plan.semanticProfile.revision, 1);
+  assert.equal(plan.semanticProfile.providerEndpoint, "http://host.docker.internal:43118/mock");
   assert.equal(JSON.stringify(plan.semanticProfile).includes(semanticCredentialPath), false);
 
   const workshopStatus = {

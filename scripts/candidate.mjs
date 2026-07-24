@@ -48,6 +48,16 @@ await exec(
   ],
   { cwd: root, maxBuffer: 20 * 1024 * 1024 }
 );
+await exec(
+  process.execPath,
+  [
+    fileURLToPath(new URL("./packed-mcp-blackbox.mjs", import.meta.url)),
+    archivePath,
+    coordinates.seedbed.coordinate,
+    coordinates.workshop.coordinate
+  ],
+  { cwd: root, maxBuffer: 20 * 1024 * 1024 }
+);
 const { stdout: sbom } = await exec(npmCommand, [...npmPrefix, "sbom", "--sbom-format", "cyclonedx"], { cwd: root, maxBuffer: 20 * 1024 * 1024 });
 const sbomPath = new URL("../artifacts/alembic-0.1.0.cdx.json", import.meta.url);
 await writeFile(sbomPath, sbom);
