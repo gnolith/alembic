@@ -11,7 +11,8 @@ import {
   resumeOperation,
   semanticFingerprint,
   sha256,
-  verifyPlan
+  verifyPlan,
+  WORKSHOP_TOOL_NAMES
 } from "../src/index.js";
 import {
   localBuildSelection,
@@ -388,13 +389,13 @@ test("semantic planning binds a redacted profile and only approved Compose-priva
     id: "semantic-main",
     name: "Semantic Main",
     provider: {
-      kind: "ollama-compatible" as const,
-      endpoint: "http://ollama:11434",
-      model: "nomic-embed-text",
-      dimensions: 768,
+      kind: "openai-compatible" as const,
+      endpoint: "https://api.example.test/v1",
+      model: "text-embedding-model",
+      dimensions: 1536,
       metric: "cosine" as const,
-      credentialSelector: null,
-      allowPrivateEndpoint: true,
+      credentialSelector: "openai-api-key",
+      allowPrivateEndpoint: false,
       redirectPolicy: "error" as const
     },
     vector: {
@@ -409,7 +410,11 @@ test("semantic planning binds a redacted profile and only approved Compose-priva
   const semantic = {
     configuration,
     expectedRevision: 2,
-    credentialSelectors: []
+    credentialSelectors: [{
+      id: "openai-api-key",
+      kind: "protected-file-v1" as const,
+      path: protectedCredential.path
+    }]
   };
   const docker = {
     installationId: expectedStatus.installationId,
@@ -435,11 +440,11 @@ test("semantic planning binds a redacted profile and only approved Compose-priva
     revision: 3,
     fingerprint: semanticFingerprint(configuration),
     configurationId: "semantic-main",
-    providerKind: "ollama-compatible",
+    providerKind: "openai-compatible",
     vectorKind: "qdrant",
-    providerEndpoint: "http://ollama:11434",
+    providerEndpoint: "https://api.example.test/v1",
     vectorEndpoint: "http://qdrant:6333",
-    credentialSelectorIds: []
+    credentialSelectorIds: ["openai-api-key"]
   });
   assert.doesNotMatch(JSON.stringify(plan.semanticProfile), /protected-token|canonical_token/u);
   const receipt = await applyPlan(plan, {
@@ -456,12 +461,23 @@ test("semantic planning binds a redacted profile and only approved Compose-priva
     })
   });
   assert.equal(receipt.state, "activation-required");
+  assert.deepEqual(receipt.semanticVerification, {
+    state: "ready",
+    configured: true,
+    revision: 3,
+    fingerprint: semanticFingerprint(configuration),
+    ready: true
+  });
 
   const badPrivate = {
     ...semantic,
     configuration: {
       ...semantic.configuration,
-      provider: { ...semantic.configuration.provider, endpoint: "http://10.0.0.9:11434" }
+      provider: {
+        ...semantic.configuration.provider,
+        endpoint: "http://10.0.0.9:11434",
+        allowPrivateEndpoint: true
+      }
     }
   };
   await assert.rejects(
@@ -540,6 +556,86 @@ test("semantic planning binds a redacted profile and only approved Compose-priva
       }
     }, seedbed),
     /public endpoint/u
+  );
+
+  const ollamaConfiguration = {
+    ...configuration,
+    id: "semantic-ollama",
+    name: "Semantic Ollama",
+    provider: {
+      kind: "ollama-compatible" as const,
+      endpoint: "http://ollama:11434",
+      model: "nomic-embed-text",
+      dimensions: 768,
+      metric: "cosine" as const,
+      credentialSelector: null,
+      allowPrivateEndpoint: true,
+      redirectPolicy: "error" as const
+    },
+    vector: { kind: "sqlite" as const }
+  };
+  const ollamaProfile = {
+    format: "gnolith-alembic-semantic-profile-v1" as const,
+    revision: 1,
+    fingerprint: semanticFingerprint(ollamaConfiguration),
+    configurationId: ollamaConfiguration.id,
+    providerKind: "ollama-compatible" as const,
+    vectorKind: "sqlite" as const,
+    providerEndpoint: "http://ollama:11434",
+    vectorEndpoint: null,
+    credentialSelectorIds: []
+  };
+  const { verifyWorkshop } = await import("../src/workshop.js");
+  const ollamaDegraded = await verifyWorkshop({
+    endpoint: docker.endpoint,
+    mode: "docker-local",
+    authentication: request.authentication,
+    expected: { ...expectedStatus, semanticState: "degraded", allowLexicalOnly: true },
+    semanticProfile: ollamaProfile,
+    protectedFile: {
+      kind: "protected-file",
+      canonicalPath: protectedCredential.path,
+      credentialId: "credential-test",
+      sha256: protectedCredential.digest
+    },
+    transport: new MockWorkshop({
+      ...workshopStatus,
+      semanticState: {
+        state: "degraded",
+        configured: true,
+        revision: 1,
+        fingerprint: ollamaProfile.fingerprint,
+        ready: false
+      }
+    })
+  });
+  assert.equal(ollamaDegraded.status.semanticState.state, "degraded");
+  assert.equal(ollamaDegraded.status.semanticState.ready, false);
+  await assert.rejects(
+    verifyWorkshop({
+      endpoint: docker.endpoint,
+      mode: "docker-local",
+      authentication: request.authentication,
+      expected: expectedStatus,
+      semanticProfile: ollamaProfile,
+      protectedFile: {
+        kind: "protected-file",
+        canonicalPath: protectedCredential.path,
+        credentialId: "credential-test",
+        sha256: protectedCredential.digest
+      },
+      transport: new MockWorkshop({
+        ...workshopStatus,
+        semanticState: {
+          state: "ready",
+          configured: true,
+          revision: 1,
+          fingerprint: ollamaProfile.fingerprint,
+          ready: true
+        }
+      })
+    }),
+    /immutable model artifact/u
   );
 
   const changed = {
@@ -671,9 +767,35 @@ test("wrong identity, shallow catalog, and degraded semantics cannot verify", as
   const { verifyWorkshop } = await import("../src/workshop.js");
   await assert.rejects(verifyWorkshop({ ...common, transport: new MockWorkshop(workshopStatus, "not-gnolith") }), /identity/u);
   await assert.rejects(verifyWorkshop({ ...common, transport: new MockWorkshop(workshopStatus, "gnolith", ["health"]) }), /gnolith_status/u);
+  await assert.rejects(
+    verifyWorkshop({
+      ...common,
+      transport: new MockWorkshop(workshopStatus, "gnolith", WORKSHOP_TOOL_NAMES.slice(0, -1))
+    }),
+    /52-operation catalog/u
+  );
+  await assert.rejects(
+    verifyWorkshop({
+      ...common,
+      transport: new MockWorkshop({
+        ...workshopStatus,
+        migrationReadiness: { ...workshopStatus.migrationReadiness, version: 10 as 11 }
+      })
+    }),
+    /pinned Workshop schema/u
+  );
   await assert.rejects(verifyWorkshop({
     ...common,
     expected: { ...expectedStatus, semanticState: "degraded", allowLexicalOnly: false },
-    transport: new MockWorkshop({ ...workshopStatus, semanticState: { state: "degraded", configured: true } })
+    transport: new MockWorkshop({
+      ...workshopStatus,
+      semanticState: {
+        state: "degraded",
+        configured: true,
+        revision: 1,
+        fingerprint: "a".repeat(64),
+        ready: false
+      }
+    })
   }), /Semantic degradation/u);
 });

@@ -38,6 +38,7 @@ function initialReceipt(plan: AlembicPlan): AlembicReceipt {
     authentication: plan.mode === "docker-local" ? "local-bearer-v1" : "remote-oauth-v1",
     seedbed: null,
     verificationDigest: null,
+    semanticVerification: null,
     previousReceipt: null,
     failureClassification: "none",
     message: "Apply started"
@@ -180,7 +181,11 @@ export async function applyPlan(
         ...(dependencies.oauthHost ? { oauthHost: dependencies.oauthHost } : {}),
         ...(dependencies.workshopTransport ? { transport: dependencies.workshopTransport } : {})
       });
-      receipt = { ...receipt, verificationDigest: verification.digest };
+      receipt = {
+        ...receipt,
+        verificationDigest: verification.digest,
+        semanticVerification: verification.status.semanticState
+      };
       receipt = await checkpoint(store, receipt, "workshop-verification", "after");
     }
 
@@ -290,7 +295,11 @@ async function repairCompletedLocalPlan(
       protectedFile: seedbedReceipt.protectedTokenFile,
       ...(dependencies.workshopTransport ? { transport: dependencies.workshopTransport } : {})
     });
-    receipt = { ...receipt, verificationDigest: verification.digest };
+    receipt = {
+      ...receipt,
+      verificationDigest: verification.digest,
+      semanticVerification: verification.status.semanticState
+    };
   } catch {
     const failed: AlembicReceipt = {
       ...receipt,

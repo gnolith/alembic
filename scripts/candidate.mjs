@@ -43,7 +43,8 @@ await exec(
   [
     fileURLToPath(new URL("./packed-seedbed-integration.mjs", import.meta.url)),
     archivePath,
-    coordinates.seedbed.coordinate
+    coordinates.seedbed.coordinate,
+    coordinates.workshop.coordinate
   ],
   { cwd: root, maxBuffer: 20 * 1024 * 1024 }
 );

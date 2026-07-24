@@ -19,14 +19,17 @@ Remote services are connect-existing only.
   the exact Seedbed candidate, component-lock, rendered graph, and Compose
   bundle digests. Any registry image path remains SHA-256-digest-qualified.
 - Credential selectors—not credential values—are accepted or stored.
-- Workshop verification performs authenticated MCP initialization, catalog
-  inspection, and `gnolith_status` comparison before config mutation.
+- Workshop verification performs authenticated MCP initialization, requires
+  the final ordered 52-operation catalog and digest, and compares the exact
+  schema-11/schema-2 `gnolith_status` evidence before config mutation.
 - Alembic owns one exact marked URL block and refuses user-owned Gnolith tables.
 - Apply is checkpointed, idempotent, resumable, and writes config last.
 - Optional Docker-local semantic configuration is typed, fingerprint-bound,
   selector-only, and reduced to a redacted plan profile. Only the exact
   profile-approved Compose hosts `ollama:11434` and `qdrant:6333` may use
-  private HTTP; arbitrary private semantic targets are rejected.
+  private HTTP; arbitrary private semantic targets are rejected. Protected
+  OpenAI-compatible profiles may verify ready with SQLite or Qdrant. Ollama
+  remains degraded unless a separately bound immutable model artifact exists.
 - Repair resumes only the recorded Seedbed operation. Alembic implements no
   restart behavior and reports activation-ready only after fresh authenticated
   Workshop identity, catalog, readiness, and status verification.
@@ -46,9 +49,10 @@ npm run candidate
 ```
 
 `candidate` verifies the exact Seedbed package/component-lock/graph/Compose
-bundle, runs a packed Alembic+Seedbed plan/apply/no-pull/nine-tool integration,
-then creates an unpublished package archive, CycloneDX SBOM, inventory, and
-lowercase SHA-256 checksums. It never tags, releases, or publishes.
+bundle and Workshop package, runs a packed semantic plan/apply/repair,
+Workshop-52/no-pull, and nine-tool Alembic integration, then creates an
+unpublished package archive, CycloneDX SBOM, inventory, and lowercase SHA-256
+checksums. It never tags, releases, or publishes.
 
 Uninstalling or disabling the Alembic plugin does not remove project config,
 installations, volumes, backups, protected credentials, operation receipts, or
