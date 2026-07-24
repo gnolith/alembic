@@ -3,7 +3,7 @@
   "$id": "https://gnolith.dev/schemas/alembic/plan-v1.json",
   "type": "object",
   "additionalProperties": false,
-  "required": ["format", "planId", "operationId", "createdAt", "expiresAt", "requestDigest", "project", "action", "mode", "endpoint", "authentication", "expected", "seedbedPlan", "seedbedPlanDigest", "seedbedStateRoot", "compatibility", "approvedSteps", "digest"],
+  "required": ["format", "planId", "operationId", "createdAt", "expiresAt", "requestDigest", "project", "action", "mode", "endpoint", "authentication", "expected", "seedbedPlan", "seedbedPlanDigest", "seedbedLocalBuildTrust", "seedbedStateRoot", "compatibility", "approvedSteps", "digest"],
   "properties": {
     "format": { "const": "gnolith-alembic-plan-v1" },
     "planId": { "type": "string", "pattern": "^plan_[0-9a-f-]{36}$" },
@@ -19,6 +19,33 @@
     "expected": { "type": "object" },
     "seedbedPlan": { "type": ["object", "null"] },
     "seedbedPlanDigest": { "oneOf": [{ "$ref": "#/$defs/digest" }, { "type": "null" }] },
+    "seedbedLocalBuildTrust": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["format", "seedbedCandidateSha256", "localBuild"],
+          "properties": {
+            "format": { "const": "gnolith-alembic-seedbed-local-build-trust-v1" },
+            "seedbedCandidateSha256": { "$ref": "#/$defs/digest" },
+            "localBuild": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["kind", "selector", "pullPolicy", "componentLockSha256", "graphSha256", "composeBundleSha256"],
+              "properties": {
+                "kind": { "const": "seedbed-local-build-v1" },
+                "selector": { "const": "gnolith-seedbed-local-build-v1" },
+                "pullPolicy": { "const": "never" },
+                "componentLockSha256": { "$ref": "#/$defs/digest" },
+                "graphSha256": { "$ref": "#/$defs/digest" },
+                "composeBundleSha256": { "$ref": "#/$defs/digest" }
+              }
+            }
+          }
+        },
+        { "type": "null" }
+      ]
+    },
     "seedbedStateRoot": { "type": ["string", "null"] },
     "compatibility": { "type": "object" },
     "approvedSteps": { "type": "array", "items": { "type": "string" } },

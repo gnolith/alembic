@@ -11,3 +11,4 @@ export * from "./apply.js";
 export * from "./control-plane.js";
 export * from "./tool-catalog.js";
 export * from "./seedbed.js";
+export * from "./seedbed-trust.js";

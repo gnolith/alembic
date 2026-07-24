@@ -5,6 +5,12 @@ import { attestProject } from "./project.js";
 import { OperationStore } from "./store.js";
 import { verifyLegacyLocalAdoption } from "./legacy.js";
 import {
+  isDigestQualifiedImage,
+  SEEDBED_LOCAL_BUILD_SELECTION,
+  SEEDBED_LOCAL_BUILD_TRUST,
+  verifySeedbedLocalBuildTrust
+} from "./seedbed-trust.js";
+import {
   ALEMBIC_VERSION,
   LOCAL_BEARER_ENV,
   type AlembicPlan,
@@ -31,7 +37,22 @@ export async function createPlan(request: PlanRequest, seedbed?: SeedbedControl)
     invariant(normalized.docker !== undefined, "docker-request-required", "Docker installation request is required");
     invariant(normalized.docker.endpoint === endpoint.href.replace(/\/$/u, ""), "docker-endpoint-mismatch", "Seedbed endpoint differs from plan");
     seedbedPlan = await seedbed.plan(normalized.docker);
-    invariant(seedbedPlan.version === "0.4.0", "seedbed-version-mismatch", "Seedbed plan version is incompatible");
+    invariant(
+      seedbedPlan.version === "gnolith-seedbed-control-plan-v2",
+      "seedbed-version-mismatch",
+      "Seedbed control-plan contract is incompatible"
+    );
+    invariant(
+      canonicalJson(normalized.docker.image) === canonicalJson(SEEDBED_LOCAL_BUILD_SELECTION) &&
+        canonicalJson(seedbedPlan.request.image) === canonicalJson(SEEDBED_LOCAL_BUILD_SELECTION),
+      "seedbed-local-build-selector-mismatch",
+      "Seedbed plan must use the exact pinned local-build selector"
+    );
+    invariant(
+      canonicalJson(seedbedPlan.request) === canonicalJson(normalized.docker),
+      "seedbed-plan-request-mismatch",
+      "Seedbed plan changed the approved Docker-local request"
+    );
     invariant(/^[0-9a-f]{64}$/u.test(seedbedPlan.digest), "seedbed-plan-digest", "Seedbed plan digest is invalid");
     invariant(
       seedbedPlan.stateRoot.kind === "external-directory" &&
@@ -61,6 +82,7 @@ export async function createPlan(request: PlanRequest, seedbed?: SeedbedControl)
     expected: { ...normalized.expected, allowLexicalOnly: normalized.acceptLexicalOnly === true },
     seedbedPlan,
     seedbedPlanDigest: seedbedPlan?.digest ?? null,
+    seedbedLocalBuildTrust: seedbedPlan === null ? null : SEEDBED_LOCAL_BUILD_TRUST,
     seedbedStateRoot: normalized.seedbedStateRoot ?? null,
     legacyAdoption: normalized.legacyAdoption ?? null,
     legacyHandoff: normalized.legacyHandoff ?? null,
@@ -91,6 +113,25 @@ export function verifyPlan(plan: AlembicPlan): void {
   invariant(digest === sha256(canonicalJson(unsigned)), "plan-digest", "Plan digest mismatch");
   invariant(new Date(plan.expiresAt).getTime() > Date.now(), "plan-expired", "Plan has expired");
   invariant(plan.compatibility.alembic === ALEMBIC_VERSION, "plan-version", "Plan was made by another Alembic version");
+  if (plan.seedbedPlan !== null) {
+    invariant(
+      canonicalJson(plan.seedbedPlan.request.image) === canonicalJson(SEEDBED_LOCAL_BUILD_SELECTION),
+      "seedbed-local-build-selector-mismatch",
+      "Seedbed plan selector differs from the pinned local build"
+    );
+    invariant(
+      plan.seedbedLocalBuildTrust !== null,
+      "seedbed-local-build-trust-missing",
+      "Seedbed local-build trust evidence is absent"
+    );
+    verifySeedbedLocalBuildTrust(plan.seedbedLocalBuildTrust);
+  } else {
+    invariant(
+      plan.seedbedLocalBuildTrust === null,
+      "seedbed-local-build-trust-unexpected",
+      "Seedbed local-build trust evidence is not applicable"
+    );
+  }
 }
 
 function validatePlanRequest(request: PlanRequest): void {
@@ -144,6 +185,13 @@ function validatePlanRequest(request: PlanRequest): void {
   }
   if (request.docker) {
     exactAllowedKeys(request.docker, ["installationId", "baseIri", "endpoint", "image", "expected"], "Docker request");
+    exactAllowedKeys(
+      request.docker.image,
+      request.docker.image.kind === "seedbed-local-build-v1"
+        ? ["kind", "selector", "pullPolicy", "componentLockSha256", "graphSha256", "composeBundleSha256"]
+        : ["kind", "reference", "pullPolicy"],
+      "Docker image selection"
+    );
     exactAllowedKeys(request.docker.expected, [
       "installationId", "baseIri", "serverVersion", "operationVersion", "catalogDigest",
       "migrationReady", "canonicalReady", "authorizationReady", "lexicalReady",
@@ -155,9 +203,13 @@ function validatePlanRequest(request: PlanRequest): void {
       "Docker and Alembic expected Workshop evidence differ"
     );
     invariant(
-      /^[A-Za-z0-9./:_-]+@sha256:[0-9a-f]{64}$/u.test(request.docker.image),
+      (request.docker.image.kind === "seedbed-local-build-v1" &&
+        canonicalJson(request.docker.image) === canonicalJson(SEEDBED_LOCAL_BUILD_SELECTION)) ||
+      (request.docker.image.kind === "digest-qualified-pulled-image-v1" &&
+        request.docker.image.pullPolicy === "digest-only" &&
+        isDigestQualifiedImage(request.docker.image.reference)),
       "unpinned-image",
-      "Docker-local requires an exact image digest"
+      "Docker-local requires the exact attested Seedbed local build or a digest-qualified pulled image"
     );
   }
   if (request.action === "adopt") {
@@ -250,7 +302,7 @@ function normalizeRequest(request: PlanRequest): PlanRequest {
       installationId: request.docker.installationId,
       baseIri: request.docker.baseIri,
       endpoint: request.docker.endpoint,
-      image: request.docker.image,
+      image: { ...request.docker.image },
       expected: { ...expected }
     };
   }

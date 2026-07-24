@@ -114,10 +114,18 @@ export async function applyPlan(
       }
       invariant(seedbedReceipt.state === "ready", "seedbed-incomplete", "Seedbed did not produce a ready receipt");
       invariant(
-        seedbedReceipt.version === (plan.seedbedPlan?.version ?? plan.legacyAdoption?.version),
+        seedbedReceipt.version === (plan.seedbedPlan === null ? plan.legacyAdoption?.version : "0.4.0"),
         "seedbed-version-changed",
         "Seedbed receipt version changed"
       );
+      if (plan.seedbedPlan !== null) {
+        invariant(
+          seedbedReceipt.digest === plan.seedbedPlan.digest &&
+            seedbedReceipt.operationId === plan.seedbedPlan.id,
+          "seedbed-plan-binding-changed",
+          "Seedbed receipt is not bound to the approved control plan"
+        );
+      }
       invariant(seedbedReceipt.endpoint === plan.endpoint, "seedbed-endpoint-changed", "Seedbed receipt endpoint changed");
       invariant(seedbedReceipt.installationId === plan.expected.installationId, "seedbed-identity-changed", "Seedbed identity changed");
       invariant(seedbedReceipt.baseIri === plan.expected.baseIri, "seedbed-base-iri-changed", "Seedbed base IRI changed");
