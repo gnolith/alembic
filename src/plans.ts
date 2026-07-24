@@ -15,8 +15,8 @@ import {
 const PLAN_LIFETIME_MS = 15 * 60 * 1000;
 export const COMPATIBILITY = {
   alembic: ALEMBIC_VERSION,
-  seedbed: "@gnolith/seedbed@0.1.0",
-  workshop: "@gnolith/workshop@0.1.0",
+  seedbed: "@gnolith/seedbed@0.4.0",
+  workshop: "@gnolith/workshop@0.5.0",
   legacy: "@gnolith/codex-plugin@0.2.0"
 } as const;
 
@@ -31,8 +31,14 @@ export async function createPlan(request: PlanRequest, seedbed?: SeedbedControl)
     invariant(normalized.docker !== undefined, "docker-request-required", "Docker installation request is required");
     invariant(normalized.docker.endpoint === endpoint.href.replace(/\/$/u, ""), "docker-endpoint-mismatch", "Seedbed endpoint differs from plan");
     seedbedPlan = await seedbed.plan(normalized.docker);
-    invariant(seedbedPlan.version === "0.1.0", "seedbed-version-mismatch", "Seedbed plan version is incompatible");
-    invariant(seedbedPlan.digest === sha256(canonicalJson(seedbedPlan.request)), "seedbed-plan-digest", "Seedbed plan digest is invalid");
+    invariant(seedbedPlan.version === "0.4.0", "seedbed-version-mismatch", "Seedbed plan version is incompatible");
+    invariant(/^[0-9a-f]{64}$/u.test(seedbedPlan.digest), "seedbed-plan-digest", "Seedbed plan digest is invalid");
+    invariant(
+      seedbedPlan.stateRoot.kind === "external-directory" &&
+        seedbedPlan.stateRoot.canonicalPath.length > 0,
+      "seedbed-state-root",
+      "Seedbed plan lacks its attested opaque external state selector"
+    );
   }
   if (normalized.action === "adopt" && normalized.mode === "docker-local") {
     invariant(normalized.legacyAdoption !== undefined && normalized.legacyEvidence !== undefined,
@@ -55,7 +61,9 @@ export async function createPlan(request: PlanRequest, seedbed?: SeedbedControl)
     expected: { ...normalized.expected, allowLexicalOnly: normalized.acceptLexicalOnly === true },
     seedbedPlan,
     seedbedPlanDigest: seedbedPlan?.digest ?? null,
+    seedbedStateRoot: normalized.seedbedStateRoot ?? null,
     legacyAdoption: normalized.legacyAdoption ?? null,
+    legacyHandoff: normalized.legacyHandoff ?? null,
     compatibility: COMPATIBILITY,
     approvedSteps:
       normalized.action === "remove"
@@ -86,6 +94,11 @@ export function verifyPlan(plan: AlembicPlan): void {
 }
 
 function validatePlanRequest(request: PlanRequest): void {
+  exactAllowedKeys(request, [
+    "taskDirectory", "confirmedProjectRoot", "hostMetadata", "action", "mode", "endpoint",
+    "authentication", "expected", "docker", "acceptLexicalOnly", "legacyAdoption",
+    "legacyEvidence", "legacyHandoff", "seedbedStateRoot"
+  ], "plan request");
   invariant(["create", "connect", "repair", "rebind", "remove", "adopt"].includes(request.action),
     "action-denied", "Unsupported action");
   invariant(["docker-local", "remote"].includes(request.mode), "mode-denied", "Unsupported deployment mode");
@@ -97,9 +110,102 @@ function validatePlanRequest(request: PlanRequest): void {
     invariant(request.authentication.kind === "environment", "local-bearer-required", "Docker-local requires bearer environment selector");
     invariant(request.authentication.variable === LOCAL_BEARER_ENV, "local-selector-mismatch", "Docker-local selector must be GNOLITH_BEARER_TOKEN");
   }
-  invariant(request.expected.installationId.length > 0, "expected-identity-required", "Expected installation ID is required");
-  invariant(request.expected.baseIri.length > 0, "expected-base-required", "Expected base IRI is required");
+  if (request.authentication.kind === "environment") {
+    exactAllowedKeys(request.authentication, ["kind", "variable"], "environment selector");
+  } else {
+    exactAllowedKeys(request.authentication, ["kind", "profile", "issuer", "audience", "scopes"], "OAuth selector");
+    const issuer = new URL(request.authentication.issuer);
+    invariant(
+      issuer.protocol === "https:" && issuer.username === "" && issuer.password === "",
+      "oauth-issuer-denied",
+      "OAuth issuer must be credential-free HTTPS"
+    );
+    invariant(validIdentifier(request.authentication.audience), "oauth-audience", "OAuth audience is invalid");
+    invariant(
+      request.authentication.scopes.length > 0 &&
+        request.authentication.scopes.length <= 32 &&
+        request.authentication.scopes.every(validIdentifier) &&
+        new Set(request.authentication.scopes).size === request.authentication.scopes.length,
+      "oauth-scopes",
+      "OAuth scopes are invalid or ambiguous"
+    );
+  }
+  exactAllowedKeys(request.expected, [
+    "installationId", "baseIri", "serverVersion", "operationVersion", "catalogDigest",
+    "migrationReady", "canonicalReady", "authorizationReady", "lexicalReady",
+    "blobReady", "producerStatus", "semanticState", "allowLexicalOnly"
+  ], "expected Workshop status");
+  invariant(validIdentifier(request.expected.installationId), "expected-identity-required", "Expected installation ID is invalid");
+  invariant(validAbsoluteIri(request.expected.baseIri), "expected-base-required", "Expected base IRI is invalid");
   invariant(request.expected.catalogDigest.length === 64, "catalog-digest-required", "Expected catalog digest is required");
+  invariant(/^[0-9a-f]{64}$/u.test(request.expected.catalogDigest), "catalog-digest-required", "Expected catalog digest must be lowercase SHA-256");
+  for (const value of [request.expected.serverVersion, request.expected.operationVersion]) {
+    invariant(validIdentifier(value), "expected-version", "Expected version evidence is invalid");
+  }
+  if (request.docker) {
+    exactAllowedKeys(request.docker, ["installationId", "baseIri", "endpoint", "image", "expected"], "Docker request");
+    exactAllowedKeys(request.docker.expected, [
+      "installationId", "baseIri", "serverVersion", "operationVersion", "catalogDigest",
+      "migrationReady", "canonicalReady", "authorizationReady", "lexicalReady",
+      "blobReady", "producerStatus", "semanticState", "allowLexicalOnly"
+    ], "Docker expected Workshop status");
+    invariant(
+      canonicalJson(request.docker.expected) === canonicalJson(request.expected),
+      "docker-expected-mismatch",
+      "Docker and Alembic expected Workshop evidence differ"
+    );
+    invariant(
+      /^[A-Za-z0-9./:_-]+@sha256:[0-9a-f]{64}$/u.test(request.docker.image),
+      "unpinned-image",
+      "Docker-local requires an exact image digest"
+    );
+  }
+  if (request.action === "adopt") {
+    invariant(request.legacyHandoff !== undefined, "legacy-handoff-required", "Adoption requires the exact inspected legacy handoff binding");
+  }
+  if (request.hostMetadata) {
+    exactAllowedKeys(request.hostMetadata, ["version", "taskDirectory", "projectRoot", "trusted", "managedPolicy"], "host metadata");
+  }
+  if (request.legacyHandoff) {
+    exactAllowedKeys(request.legacyHandoff, ["bundleDigest", "operationIds"], "legacy handoff binding");
+  }
+  if (request.legacyEvidence) {
+    exactAllowedKeys(request.legacyEvidence, [
+      "installationId", "baseIri", "domainCount", "payloadDigest", "catalogDigest", "ownerLedgerDigest"
+    ], "legacy evidence");
+  }
+  if (request.legacyAdoption) {
+    exactAllowedKeys(request.legacyAdoption, [
+      "format", "version", "operationId", "state", "installationId", "baseIri", "domainCount",
+      "payloadDigest", "catalogDigest", "ownerLedgerDigest", "protectedTokenFile"
+    ], "legacy adoption receipt");
+    exactAllowedKeys(
+      request.legacyAdoption.protectedTokenFile,
+      ["kind", "canonicalPath", "credentialId", "sha256"],
+      "protected credential selector"
+    );
+  }
+}
+
+function exactAllowedKeys(value: object, allowed: readonly string[], label: string): void {
+  invariant(
+    Object.keys(value).every((key) => allowed.includes(key)),
+    "unapproved-input",
+    `${label} contains an unapproved field`
+  );
+}
+
+function validIdentifier(value: string): boolean {
+  return value.length > 0 && value === value.normalize("NFC") && [...value].length <= 256;
+}
+
+function validAbsoluteIri(value: string): boolean {
+  try {
+    const iri = new URL(value);
+    return ["http:", "https:", "urn:"].includes(iri.protocol) && iri.username === "" && iri.password === "";
+  } catch {
+    return false;
+  }
 }
 
 function normalizeRequest(request: PlanRequest): PlanRequest {
@@ -122,9 +228,10 @@ function normalizeRequest(request: PlanRequest): PlanRequest {
     canonicalReady: request.expected.canonicalReady,
     authorizationReady: request.expected.authorizationReady,
     lexicalReady: request.expected.lexicalReady,
+    blobReady: request.expected.blobReady,
     producerStatus: request.expected.producerStatus,
     semanticState: request.expected.semanticState,
-    allowLexicalOnly: request.expected.allowLexicalOnly
+    allowLexicalOnly: request.acceptLexicalOnly === true
   };
   const normalized: PlanRequest = {
     taskDirectory: request.taskDirectory,
@@ -137,6 +244,7 @@ function normalizeRequest(request: PlanRequest): PlanRequest {
   if (request.confirmedProjectRoot !== undefined) normalized.confirmedProjectRoot = request.confirmedProjectRoot;
   if (request.hostMetadata !== undefined) normalized.hostMetadata = { ...request.hostMetadata };
   if (request.acceptLexicalOnly !== undefined) normalized.acceptLexicalOnly = request.acceptLexicalOnly;
+  if (request.seedbedStateRoot !== undefined) normalized.seedbedStateRoot = request.seedbedStateRoot;
   if (request.docker !== undefined) {
     normalized.docker = {
       installationId: request.docker.installationId,
@@ -162,5 +270,15 @@ function normalizeRequest(request: PlanRequest): PlanRequest {
     };
   }
   if (request.legacyEvidence !== undefined) normalized.legacyEvidence = { ...request.legacyEvidence };
+  if (request.legacyHandoff !== undefined) {
+    invariant(/^[0-9a-f]{64}$/u.test(request.legacyHandoff.bundleDigest),
+      "legacy-handoff-digest", "Legacy handoff digest is invalid");
+    invariant(request.legacyHandoff.operationIds.length <= 1000,
+      "legacy-operation-bound", "Legacy handoff has too many operation identifiers");
+    normalized.legacyHandoff = {
+      bundleDigest: request.legacyHandoff.bundleDigest,
+      operationIds: [...request.legacyHandoff.operationIds]
+    };
+  }
   return normalized;
 }

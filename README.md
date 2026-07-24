@@ -12,7 +12,8 @@ Remote services are connect-existing only.
 ## Safety model
 
 - Plans bind the canonical project, config digest, endpoint, auth selector,
-  expected identity, compatibility coordinates, expiry, and operation ID.
+  expected identity, approved external Seedbed state selector, compatibility
+  coordinates, expiry, and operation ID.
 - Credential selectors—not credential values—are accepted or stored.
 - Workshop verification performs authenticated MCP initialization, catalog
   inspection, and `gnolith_status` comparison before config mutation.

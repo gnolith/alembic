@@ -63,9 +63,30 @@ export interface ExpectedWorkshopStatus {
   canonicalReady: boolean;
   authorizationReady: boolean;
   lexicalReady: boolean;
+  blobReady: boolean;
   producerStatus: "ready" | "degraded" | "absent";
   semanticState: "ready" | "degraded" | "absent";
   allowLexicalOnly: boolean;
+}
+
+export interface WorkshopStatusOutput {
+  installationId: string;
+  baseIri: string;
+  principalId: string;
+  credentialId: string;
+  activeWorkspaceId: string | null;
+  capabilities: readonly string[];
+  authorizationRevision: number;
+  migrationReadiness: { namespace: "@gnolith/workshop"; version: number; ready: boolean };
+  compatibility: { diamond: boolean; taproot: boolean };
+  canonicalReady: boolean;
+  authorizationReady: boolean;
+  lexicalReady: boolean;
+  semanticState: { state: "ready" | "degraded" | "unconfigured"; configured: boolean };
+  producers: { ready: boolean; fingerprint: string; kinds: readonly ("task" | "memory" | "prompt")[] };
+  blobReady: boolean;
+  versions: { server: string; operationSchema: 9 };
+  operationCatalogDigest: string;
 }
 
 export interface HostMetadataV1 {
@@ -108,6 +129,10 @@ export interface InstallationPlan {
   version: string;
   request: DockerInstallationRequest;
   steps: readonly string[];
+  stateRoot: {
+    kind: "external-directory";
+    canonicalPath: string;
+  };
 }
 export interface InstallationReceipt {
   operationId: string;
@@ -144,6 +169,7 @@ export interface PlanRequest {
   authentication: EnvironmentSelector | HostOAuthSelector;
   expected: ExpectedWorkshopStatus;
   docker?: DockerInstallationRequest;
+  seedbedStateRoot?: string;
   acceptLexicalOnly?: boolean;
   legacyAdoption?: LegacyLocalAdoptionReceipt;
   legacyEvidence?: {
@@ -153,6 +179,10 @@ export interface PlanRequest {
     payloadDigest: string;
     catalogDigest: string;
     ownerLedgerDigest: string;
+  };
+  legacyHandoff?: {
+    bundleDigest: string;
+    operationIds: readonly string[];
   };
 }
 
@@ -171,7 +201,12 @@ export interface AlembicPlan {
   expected: ExpectedWorkshopStatus;
   seedbedPlan: InstallationPlan | null;
   seedbedPlanDigest: string | null;
+  seedbedStateRoot: string | null;
   legacyAdoption: LegacyLocalAdoptionReceipt | null;
+  legacyHandoff: {
+    bundleDigest: string;
+    operationIds: readonly string[];
+  } | null;
   compatibility: {
     alembic: string;
     seedbed: string;
@@ -215,7 +250,7 @@ export interface WorkshopVerification {
   identity: typeof WORKSHOP_IDENTITY;
   protocolVersion: string;
   tools: readonly string[];
-  status: ExpectedWorkshopStatus;
+  status: WorkshopStatusOutput;
   digest: string;
 }
 
@@ -283,4 +318,17 @@ export interface LegacyLocalAdoptionReceipt {
   catalogDigest: string;
   ownerLedgerDigest: string;
   protectedTokenFile: ProtectedFileSelector;
+}
+
+export interface AlembicLegacyAdoptionReceipt {
+  format: "gnolith-alembic-legacy-adoption-v1";
+  originalBundleDigest: string;
+  legacyPackage: "@gnolith/codex-plugin@0.2.0";
+  legacyOperationIds: readonly string[];
+  alembicPlanId: string;
+  seedbedAdoptionDigest: string | null;
+  configBeforeDigest: string | null;
+  configAfterDigest: string;
+  reversible: true;
+  createdAt: string;
 }

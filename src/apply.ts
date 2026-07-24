@@ -1,4 +1,4 @@
-import { canonicalJson, sha256 } from "./canonical.js";
+import { canonicalJson, redact, sha256 } from "./canonical.js";
 import { atomicConfigWrite, inspectConfig, renderManagedBlock, replaceManagedBlock } from "./config.js";
 import { AlembicError, invariant } from "./errors.js";
 import { currentConfigDigest } from "./project.js";
@@ -120,6 +120,23 @@ export async function applyPlan(
       );
       invariant(seedbedReceipt.endpoint === plan.endpoint, "seedbed-endpoint-changed", "Seedbed receipt endpoint changed");
       invariant(seedbedReceipt.installationId === plan.expected.installationId, "seedbed-identity-changed", "Seedbed identity changed");
+      invariant(seedbedReceipt.baseIri === plan.expected.baseIri, "seedbed-base-iri-changed", "Seedbed base IRI changed");
+      invariant(
+        canonicalJson(seedbedReceipt.expected) === canonicalJson(plan.expected),
+        "seedbed-readiness-changed",
+        "Seedbed expected Workshop evidence changed"
+      );
+      invariant(
+        seedbedReceipt.environmentSelector === "GNOLITH_BEARER_TOKEN",
+        "seedbed-environment-selector",
+        "Seedbed credential environment selector is incompatible"
+      );
+      invariant(
+        seedbedReceipt.protectedTokenFile.credentialId.length > 0 &&
+          /^[0-9a-f]{64}$/u.test(seedbedReceipt.protectedTokenFile.sha256),
+        "seedbed-credential-selector",
+        "Seedbed protected credential selector is invalid"
+      );
       receipt = {
         ...receipt,
         seedbed: {
@@ -161,6 +178,23 @@ export async function applyPlan(
     });
     receipt = { ...receipt, configAfterDigest: afterDigest };
     receipt = await checkpoint(store, receipt, "config-write", "after");
+    if (plan.action === "adopt") {
+      invariant(plan.legacyHandoff !== null, "legacy-handoff-missing", "Adoption plan lacks its original handoff binding");
+      receipt = await checkpoint(store, receipt, "legacy-adoption-receipt", "before");
+      await store.writeAdoption(plan.operationId, {
+        format: "gnolith-alembic-legacy-adoption-v1",
+        originalBundleDigest: plan.legacyHandoff.bundleDigest,
+        legacyPackage: "@gnolith/codex-plugin@0.2.0",
+        legacyOperationIds: plan.legacyHandoff.operationIds,
+        alembicPlanId: plan.planId,
+        seedbedAdoptionDigest: plan.legacyAdoption ? sha256(canonicalJson(plan.legacyAdoption)) : null,
+        configBeforeDigest: plan.project.configDigest,
+        configAfterDigest: afterDigest,
+        reversible: true,
+        createdAt: new Date().toISOString()
+      });
+      receipt = await checkpoint(store, receipt, "legacy-adoption-receipt", "after");
+    }
     receipt = {
       ...receipt,
       state: "activation-required",
@@ -176,7 +210,10 @@ export async function applyPlan(
       ...receipt,
       state: prerequisite ? "activation-prerequisite" : "failed",
       updatedAt: new Date().toISOString(),
-      message: error instanceof Error ? error.message : "Apply failed"
+      message:
+        error instanceof AlembicError
+          ? String(redact(error.message))
+          : "Apply failed; run bounded diagnosis using the operation ID"
     };
     await store.writeReceipt(failed);
     throw error;

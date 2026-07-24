@@ -1,0 +1,37 @@
+{
+  "format": "gnolith-alembic-candidate-lock-v1",
+  "seedbed": {
+    "package": "@gnolith/seedbed",
+    "version": "0.4.0",
+    "commit": "6a21c5c02b092a923502007a1109e7fc023dbce7",
+    "tree": "41e5146cd19dc9af27e7039d796e2a6256e62cf1",
+    "artifact": "gnolith-seedbed-0.4.0.tgz",
+    "bytes": 867592,
+    "sha256": "c0fea748fe8e97483408e7042d7a1250eb57b18ec14e0a85e0945ef97044a9db",
+    "composeBundleSha256": "2a0f1e69f9fb2a4aeb8e906c5db3aec091cfcf52d8af0be65088da251d38235a",
+    "sbomSha256": "600c7f39526de1cbc6c3365fed4ff2dafd9fc7cd50a2831ade184ce4261399a1",
+    "graphSha256": "15ad77b7e178bd76f4ea32d1c1570f8d287caf52b6bd87bc286ffd36f2ad34a9",
+    "componentLockSha256": "b96cc5bfb4f73413e12d8cffd13dd8f9f97f3ca8ffffcefcd576176c521f3190"
+  },
+  "workshop": {
+    "package": "@gnolith/workshop",
+    "version": "0.5.0",
+    "commit": "c2e345c0b287af7c8622e226943af83a11a33ac7",
+    "tree": "fbf15a852ee20d4dedabc6cfcb3403bb6419520d",
+    "artifact": "gnolith-workshop-0.5.0.tgz",
+    "bytes": 207697,
+    "sha256": "477ce5b388aa75f4d451555341fbdd7cc74092d90256de2ec6ae054aff019b70",
+    "sbomSha256": "1483b5ff63ab9c74b3bd21fd992149c5c41fd255bce0def06f23c63b3f90d750",
+    "operationSchema": 9,
+    "catalogDigest": "577cc1de501b0ae3556eb1d32e7dd516c70a09c5b6226d671cec312068fba3dd"
+  },
+  "legacy": {
+    "sourcePackage": "@gnolith/codex-plugin@0.2.0",
+    "migrationPackage": "@gnolith/codex-plugin",
+    "version": "0.3.0",
+    "commit": "b96b298b5bdf1c23f9749b809f6a4905230ab32d",
+    "artifact": "gnolith-codex-plugin-0.3.0.tgz",
+    "bytes": 19135,
+    "sha256": "25ec8458130527bbf71662e0dc2c9bea79c0311d6419370b7cfa246fd25ba89c"
+  }
+}

@@ -1,4 +1,4 @@
-name: Candidate dry run
+name: Release preflight
 on:
   workflow_dispatch:
 permissions:
@@ -7,23 +7,18 @@ jobs:
   candidate:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm
       - run: npm ci
       - run: npm run gate
-      - run: npm run candidate
-        env:
-          SEEDBED_CANDIDATE: ${{ vars.SEEDBED_CANDIDATE }}
-          SEEDBED_CANDIDATE_SHA256: ${{ vars.SEEDBED_CANDIDATE_SHA256 }}
-          WORKSHOP_CANDIDATE: ${{ vars.WORKSHOP_CANDIDATE }}
-          WORKSHOP_CANDIDATE_SHA256: ${{ vars.WORKSHOP_CANDIDATE_SHA256 }}
-          LEGACY_CANDIDATE: "@gnolith/codex-plugin@0.2.0"
-          LEGACY_CANDIDATE_SHA256: ${{ vars.LEGACY_CANDIDATE_SHA256 }}
+      - run: mkdir -p artifacts
+      - run: npm pack --pack-destination artifacts
+      - run: npm sbom --sbom-format cyclonedx > artifacts/alembic-0.1.0.cdx.json
       - uses: actions/upload-artifact@v4
         with:
-          name: alembic-candidate
+          name: alembic-release-preflight
           path: artifacts/
           if-no-files-found: error

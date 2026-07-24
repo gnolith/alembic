@@ -2,8 +2,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { join } from "node:path";
 import { readFile } from "node:fs/promises";
-import { applyPlan, createPlan, inspectConfig, resumeOperation } from "../src/index.js";
-import { MockSeedbed, MockWorkshop, expectedStatus, protectedToken, temporaryProject } from "./helpers.js";
+import { applyPlan, canonicalJson, createPlan, inspectConfig, resumeOperation, sha256, verifyPlan } from "../src/index.js";
+import { MockSeedbed, MockWorkshop, expectedStatus, protectedToken, temporaryProject, workshopStatus } from "./helpers.js";
 
 test("Docker-local apply invokes Seedbed, verifies protocol, writes config last, and requires new task", async () => {
   const root = await temporaryProject();
@@ -126,6 +126,52 @@ test("concurrent config change invalidates a bound plan before Seedbed mutation"
   assert.equal(seedbed.applied, 0);
 });
 
+test("expired or modified plans fail before external mutation", async () => {
+  const root = await temporaryProject();
+  const protectedCredential = await protectedToken(root);
+  const seedbed = new MockSeedbed(protectedCredential.path, protectedCredential.digest);
+  const docker = {
+    installationId: expectedStatus.installationId,
+    baseIri: expectedStatus.baseIri,
+    endpoint: "http://127.0.0.1/mcp",
+    image: "ghcr.io/gnolith/workshop@sha256:" + "b".repeat(64),
+    expected: expectedStatus
+  };
+  const plan = await createPlan({
+    taskDirectory: root,
+    confirmedProjectRoot: root,
+    action: "create",
+    mode: "docker-local",
+    endpoint: docker.endpoint,
+    authentication: { kind: "environment", variable: "GNOLITH_BEARER_TOKEN" },
+    expected: expectedStatus,
+    docker
+  }, seedbed);
+  assert.throws(() => verifyPlan({ ...plan, endpoint: "http://127.0.0.1:9999/mcp" }), /digest/u);
+  const { digest: oldDigest, ...unsigned } = { ...plan, expiresAt: "2000-01-01T00:00:00.000Z" };
+  assert.equal(oldDigest, plan.digest);
+  const expired = { ...unsigned, digest: sha256(canonicalJson(unsigned)) };
+  assert.throws(() => verifyPlan(expired), /expired/u);
+  await assert.rejects(
+    createPlan({
+      taskDirectory: root,
+      confirmedProjectRoot: root,
+      action: "create",
+      mode: "docker-local",
+      endpoint: docker.endpoint,
+      authentication: {
+        kind: "environment",
+        variable: "GNOLITH_BEARER_TOKEN",
+        token: "SECRET_CANARY_REJECTED"
+      },
+      expected: expectedStatus,
+      docker
+    } as unknown as Parameters<typeof createPlan>[0], seedbed),
+    /unapproved field/u
+  );
+  assert.equal(seedbed.applied, 0);
+});
+
 test("remote OAuth validates metadata, uses host token transiently, and writes auth only", async () => {
   const root = await temporaryProject();
   let authorized = 0;
@@ -201,6 +247,7 @@ test("successful Seedbed legacy-local-v1 receipt is consumed before activation",
     endpoint: "http://127.0.0.1/mcp",
     authentication: { kind: "environment", variable: "GNOLITH_BEARER_TOKEN" },
     expected: expectedStatus,
+    legacyHandoff: { bundleDigest: "f".repeat(64), operationIds: ["legacy-op"] },
     legacyEvidence: evidence,
     legacyAdoption: {
       format: "gnolith-seedbed-legacy-adoption-v1",
@@ -219,6 +266,12 @@ test("successful Seedbed legacy-local-v1 receipt is consumed before activation",
   const receipt = await applyPlan(plan, { workshopTransport: new MockWorkshop() });
   assert.equal(receipt.state, "activation-required");
   assert.equal(receipt.seedbed?.operationId, "seedbed-adopt-op");
+  const adoption = JSON.parse(
+    await readFile(join(root, ".codex", "alembic", "adoptions", `${plan.operationId}.json`), "utf8")
+  ) as { reversible: boolean; originalBundleDigest: string; legacyPackage: string };
+  assert.equal(adoption.reversible, true);
+  assert.equal(adoption.originalBundleDigest, "f".repeat(64));
+  assert.equal(adoption.legacyPackage, "@gnolith/codex-plugin@0.2.0");
 });
 
 test("wrong identity, shallow catalog, and degraded semantics cannot verify", async () => {
@@ -233,11 +286,11 @@ test("wrong identity, shallow catalog, and degraded semantics cannot verify", as
     protectedFile: { kind: "protected-file" as const, canonicalPath: protectedCredential.path, credentialId: "test", sha256: protectedCredential.digest }
   };
   const { verifyWorkshop } = await import("../src/workshop.js");
-  await assert.rejects(verifyWorkshop({ ...common, transport: new MockWorkshop(expectedStatus, "not-gnolith") }), /identity/u);
-  await assert.rejects(verifyWorkshop({ ...common, transport: new MockWorkshop(expectedStatus, "gnolith", ["health"]) }), /gnolith_status/u);
+  await assert.rejects(verifyWorkshop({ ...common, transport: new MockWorkshop(workshopStatus, "not-gnolith") }), /identity/u);
+  await assert.rejects(verifyWorkshop({ ...common, transport: new MockWorkshop(workshopStatus, "gnolith", ["health"]) }), /gnolith_status/u);
   await assert.rejects(verifyWorkshop({
     ...common,
     expected: { ...expectedStatus, semanticState: "degraded", allowLexicalOnly: false },
-    transport: new MockWorkshop({ ...expectedStatus, semanticState: "degraded" })
+    transport: new MockWorkshop({ ...workshopStatus, semanticState: { state: "degraded", configured: true } })
   }), /Semantic degradation/u);
 });

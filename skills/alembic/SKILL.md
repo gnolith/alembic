@@ -19,6 +19,8 @@ discover and create one digest-bound plan. Never overwrite a user-owned
 
 Supported targets are Seedbed Docker-local and connect-existing remote
 Workshop. Process/stdio and Codex Sites provisioning are unsupported. Pass
+an explicitly approved external Seedbed state root for Docker-local; Seedbed
+must attest that it is outside the project and every worktree. Pass
 credential selectors only, never secret values, headers, commands, environment
 maps, SQL/SPARQL, data-plane tool names, or research/domain payloads.
 

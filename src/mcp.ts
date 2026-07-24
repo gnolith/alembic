@@ -2,8 +2,10 @@
 import { createInterface } from "node:readline";
 import { AlembicControlPlane } from "./control-plane.js";
 import { invariant } from "./errors.js";
+import { publicError } from "./canonical.js";
 import { TOOL_CATALOG } from "./tool-catalog.js";
 import type { PlanRequest } from "./types.js";
+import { loadDefaultSeedbedFactory } from "./seedbed.js";
 
 interface JsonRpcRequest {
   jsonrpc: "2.0";
@@ -12,7 +14,8 @@ interface JsonRpcRequest {
   params?: { name?: string; arguments?: Record<string, unknown> };
 }
 
-const control = new AlembicControlPlane();
+const seedbedFactory = await loadDefaultSeedbedFactory().catch(() => undefined);
+const control = new AlembicControlPlane(seedbedFactory ? { seedbedFactory } : {});
 const input = createInterface({ input: process.stdin });
 for await (const line of input) {
   let request: JsonRpcRequest;
@@ -21,11 +24,12 @@ for await (const line of input) {
     const result = await handle(request);
     process.stdout.write(JSON.stringify({ jsonrpc: "2.0", id: request.id ?? null, result }) + "\n");
   } catch (error) {
+    const safe = publicError(error);
     process.stdout.write(
       JSON.stringify({
         jsonrpc: "2.0",
         id: null,
-        error: { code: -32000, message: error instanceof Error ? error.message : "Alembic request failed" }
+        error: { code: -32000, message: safe.message, data: { classification: safe.code } }
       }) + "\n"
     );
   }
@@ -47,6 +51,12 @@ async function handle(request: JsonRpcRequest): Promise<unknown> {
   const name = request.params?.name;
   const args = request.params?.arguments ?? {};
   invariant(TOOL_CATALOG.some((tool) => tool.name === name), "tool-not-found", "Unknown Alembic control-plane tool");
+  const definition = TOOL_CATALOG.find((tool) => tool.name === name);
+  invariant(
+    definition !== undefined && Object.keys(args).every((key) => key in definition.inputSchema.properties),
+    "unapproved-input",
+    "Tool input contains an unapproved field"
+  );
   switch (name) {
     case "alembic_inspect":
       return content(await control.inspect(args as Parameters<typeof control.inspect>[0]));

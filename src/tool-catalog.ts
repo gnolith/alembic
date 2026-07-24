@@ -25,38 +25,42 @@ const scope = {
 const identifier = (description: string) => ({ type: "string", pattern: "^(?:plan|op)_[0-9a-f-]{36}$", description });
 
 export const TOOL_CATALOG: readonly ToolDefinition[] = [
-  definition("alembic_inspect", "Inspect exact project scope and one managed connection.", scope, ["taskDirectory"], true, true),
-  definition("alembic_discover", "Discover bounded supported setup choices.", scope, ["taskDirectory"], true, true),
+  definition("alembic_inspect", "Inspect exact project scope and one managed connection.", scope, ["taskDirectory"], true, true, false, false),
+  definition("alembic_discover", "Discover bounded supported setup choices.", scope, ["taskDirectory"], true, true, false, false),
   definition("alembic_plan", "Create a digest-bound expiring setup plan.", {
     request: { type: "object", description: "Typed Alembic plan request; selectors only" }
-  }, ["request"], false, false),
+  }, ["request"], false, false, false, true),
   definition("alembic_apply", "Apply one approved plan with config written last.", {
-    projectRoot: { type: "string" },
+    ...scope,
     planId: identifier("Approved plan ID")
-  }, ["projectRoot", "planId"], false, true),
+  }, ["taskDirectory", "planId"], false, true, true, true),
   definition("alembic_operation_read", "Read one redacted operation receipt.", {
-    projectRoot: { type: "string" },
+    ...scope,
     operationId: identifier("Operation ID")
-  }, ["projectRoot", "operationId"], true, true),
+  }, ["taskDirectory", "operationId"], true, true, false, false),
   definition("alembic_operation_resume", "Resume the exact interrupted operation.", {
-    projectRoot: { type: "string" },
+    ...scope,
     operationId: identifier("Operation ID")
-  }, ["projectRoot", "operationId"], false, true),
+  }, ["taskDirectory", "operationId"], false, true, true, true),
   definition("alembic_diagnose", "Run bounded redacted project/connection diagnosis.", {
     ...scope,
-    installationId: { type: "string", maxLength: 256 }
-  }, ["taskDirectory"], true, false),
+    installationId: { type: "string", maxLength: 256 },
+    seedbedStateRoot: { type: "string", description: "Explicitly approved external Seedbed-owned state root" },
+    operationId: identifier("Operation ID for identity and activation comparison")
+  }, ["taskDirectory"], true, false, false, true),
   definition("alembic_legacy_inspect", "Validate an exact Setup 0.2.0 structural handoff bundle.", {
     bundlePath: { type: "string" },
-    taskDirectory: { type: "string" },
-    configPath: { type: "string" },
+    ...scope,
     packageName: { const: "@gnolith/codex-plugin" },
     packageVersion: { const: "0.2.0" }
-  }, ["bundlePath", "taskDirectory", "configPath", "packageName", "packageVersion"], true, true),
+  }, ["bundlePath", "taskDirectory", "packageName", "packageVersion"], true, true, false, false),
   definition("alembic_legacy_adopt", "Plan reversible adoption after strict legacy inspection.", {
-    inspected: { type: "object" },
+    bundlePath: { type: "string" },
+    ...scope,
+    packageName: { const: "@gnolith/codex-plugin" },
+    packageVersion: { const: "0.2.0" },
     planRequest: { type: "object" }
-  }, ["inspected"], false, false)
+  }, ["bundlePath", "taskDirectory", "packageName", "packageVersion"], false, false, false, true)
 ];
 
 function definition(
@@ -65,7 +69,9 @@ function definition(
   properties: Record<string, unknown>,
   required: readonly string[],
   readOnlyHint: boolean,
-  idempotentHint: boolean
+  idempotentHint: boolean,
+  destructiveHint: boolean,
+  openWorldHint: boolean
 ): ToolDefinition {
   return {
     name,
@@ -73,9 +79,9 @@ function definition(
     inputSchema: { type: "object", properties, required, additionalProperties: false },
     annotations: {
       readOnlyHint,
-      destructiveHint: false,
+      destructiveHint,
       idempotentHint,
-      openWorldHint: !readOnlyHint
+      openWorldHint
     }
   };
 }

@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://gnolith.dev/schemas/alembic/legacy-adoption-v1.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["format", "originalBundleDigest", "legacyPackage", "legacyOperationIds", "alembicPlanId", "seedbedAdoptionDigest", "configBeforeDigest", "configAfterDigest", "reversible", "createdAt"],
+  "properties": {
+    "format": { "const": "gnolith-alembic-legacy-adoption-v1" },
+    "originalBundleDigest": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "legacyPackage": { "const": "@gnolith/codex-plugin@0.2.0" },
+    "legacyOperationIds": { "type": "array", "maxItems": 1000, "items": { "type": "string", "maxLength": 256 } },
+    "alembicPlanId": { "type": "string" },
+    "seedbedAdoptionDigest": { "type": ["string", "null"], "pattern": "^[0-9a-f]{64}$" },
+    "configBeforeDigest": { "type": ["string", "null"], "pattern": "^[0-9a-f]{64}$" },
+    "configAfterDigest": { "type": ["string", "null"], "pattern": "^[0-9a-f]{64}$" },
+    "reversible": { "const": true },
+    "createdAt": { "type": "string", "format": "date-time" }
+  }
+}

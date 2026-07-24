@@ -1,5 +1,5 @@
 import { constants } from "node:fs";
-import { access, lstat, mkdir, open, readFile, rename, rm } from "node:fs/promises";
+import { access, lstat, mkdir, open, readFile, realpath, rename, rm } from "node:fs/promises";
 import { dirname } from "node:path";
 import { randomUUID } from "node:crypto";
 import { sha256 } from "./canonical.js";
@@ -41,11 +41,41 @@ export function inspectConfigText(text: string): ConfigInspection {
   const begin = starts[0]!.index!;
   const end = ends[0]!.index! + END_MARKER.length;
   const block = text.slice(begin, end);
-  if (!block.includes("[mcp_servers.gnolith]")) {
+  const lines = block.replace(/\r\n?/gu, "\n").split("\n");
+  if (
+    lines.length !== 9 ||
+    lines[0] !== BEGIN_MARKER ||
+    lines[1] !== "[mcp_servers.gnolith]" ||
+    !/^url = "[^"\r\n]+"$/u.test(lines[2] ?? "") ||
+    ![
+      `bearer_token_env_var = "${LOCAL_BEARER_ENV}"`,
+      'auth = "oauth"'
+    ].includes(lines[3] ?? "") ||
+    lines[4] !== "required = false" ||
+    lines[5] !== "startup_timeout_sec = 20" ||
+    lines[6] !== "tool_timeout_sec = 60" ||
+    lines[7] !== 'default_tools_approval_mode = "writes"' ||
+    lines[8] !== END_MARKER
+  ) {
     return { state: "invalid", digest: sha256(text), block, endpoint: null };
   }
   const endpoint = block.match(/^url = "([^"\r\n]+)"$/mu)?.[1] ?? null;
-  return { state: endpoint ? "complete" : "invalid", digest: sha256(text), block, endpoint };
+  try {
+    const parsed = new URL(endpoint ?? "");
+    if (
+      parsed.username !== "" ||
+      parsed.password !== "" ||
+      parsed.pathname !== "/mcp" ||
+      parsed.search !== "" ||
+      parsed.hash !== "" ||
+      !["http:", "https:"].includes(parsed.protocol)
+    ) {
+      return { state: "invalid", digest: sha256(text), block, endpoint: null };
+    }
+  } catch {
+    return { state: "invalid", digest: sha256(text), block, endpoint: null };
+  }
+  return { state: "complete", digest: sha256(text), block, endpoint };
 }
 
 export async function inspectConfig(path: string): Promise<ConfigInspection> {
@@ -111,6 +141,11 @@ export async function atomicConfigWrite(input: {
   const before = await inspectConfig(input.path);
   invariant(before.digest === input.expectedDigest, "config-changed", "Codex config changed after planning");
   await mkdir(dirname(input.path), { recursive: true, mode: 0o700 });
+  invariant(
+    await realpath(dirname(input.path)) === dirname(input.path),
+    "config-parent-link",
+    "Codex config directory changed to an alias"
+  );
   const temp = `${input.path}.alembic-${randomUUID()}.tmp`;
   let handle;
   try {
@@ -121,6 +156,11 @@ export async function atomicConfigWrite(input: {
     handle = undefined;
     const recheck = await inspectConfig(input.path);
     invariant(recheck.digest === input.expectedDigest, "config-changed", "Codex config changed during apply");
+    invariant(
+      await realpath(dirname(input.path)) === dirname(input.path),
+      "config-parent-link",
+      "Codex config directory changed during apply"
+    );
     await rename(temp, input.path);
     await access(input.path, constants.R_OK);
     return sha256(await readFile(input.path));

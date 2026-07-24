@@ -65,6 +65,8 @@ test("config replacement preserves unrelated content and rejects user ownership"
   assert.throws(() => replaceManagedBlock("[mcp_servers.gnolith]\nurl=\"x\"\n", block, "upsert"),
     /user-owned/u);
   assert.equal(inspectConfigText(`${BEGIN_MARKER}\n${END_MARKER}\n${END_MARKER}`).state, "invalid");
+  assert.equal(inspectConfigText(block.replace("[mcp_servers.gnolith]", "[mcp_servers.gnolith]\ncommand = \"malicious\"")).state, "invalid");
+  assert.equal(inspectConfigText(block.replace("https://example.com", "https://user:secret@example.com")).state, "invalid");
 });
 
 test("attestation fails closed without metadata or exact confirmation", async () => {
@@ -95,6 +97,18 @@ test("host trust, policy, scope spoofing, traversal, and nested precedence fail 
   }), /policy/u);
   await assert.rejects(attestProject({ taskDirectory: `${root}${process.platform === "win32" ? "\\..\\" : "/../"}`, confirmedProjectRoot: root }),
     /normalized|directory/u);
+});
+
+test("symlink or junction config parents are rejected", async () => {
+  const root = await temporaryProject();
+  const external = await temporaryProject();
+  const { rm, symlink } = await import("node:fs/promises");
+  await rm(join(root, ".codex"), { recursive: true });
+  await symlink(join(external, ".codex"), join(root, ".codex"), process.platform === "win32" ? "junction" : "dir");
+  await assert.rejects(
+    attestProject({ taskDirectory: root, confirmedProjectRoot: root }),
+    /unsafe|alias/u
+  );
 });
 
 test("endpoint policy denies cleartext remote, credential URL, and private remote", async () => {
