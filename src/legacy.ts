@@ -83,9 +83,16 @@ export async function inspectLegacyBundle(input: {
   invariant(input.packageName === "@gnolith/codex-plugin" && input.packageVersion === "0.2.0",
     "legacy-package-version", "Only @gnolith/codex-plugin@0.2.0 is accepted");
   invariant(input.bytes.byteLength <= MAX_BUNDLE, "legacy-bundle-too-large", "Legacy bundle exceeds 1 MiB");
+  const firstContentByte = input.bytes.find((byte) => ![0x09, 0x0a, 0x0d, 0x20].includes(byte));
+  invariant(firstContentByte === 0x7b, "legacy-json-format", "Legacy bundle must be a JSON object");
   const raw = Buffer.from(input.bytes).toString("utf8");
   invariant(!raw.includes("\uFFFD"), "legacy-utf8", "Legacy bundle is not valid UTF-8");
-  const bundle = JSON.parse(raw) as LegacyHandoffBundle;
+  let bundle: LegacyHandoffBundle;
+  try {
+    bundle = JSON.parse(raw) as LegacyHandoffBundle;
+  } catch {
+    invariant(false, "legacy-json-format", "Legacy bundle must be valid JSON");
+  }
   invariant(bundle && typeof bundle === "object" && !Array.isArray(bundle), "legacy-schema", "Legacy bundle must be an object");
   exactKeys(bundle, BUNDLE_KEYS, "Legacy bundle");
   invariant(bundle.format === "gnolith-setup-to-alembic-v1" && bundle.schemaVersion === 1,

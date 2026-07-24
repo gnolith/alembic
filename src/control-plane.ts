@@ -22,6 +22,7 @@ export interface ControlPlaneDependencies extends ApplyDependencies {
   planDeadlineMs?: number;
   diagnoseDeadlineMs?: number;
   legacyInspectDeadlineMs?: number;
+  phaseObserver?: (stage: string) => void;
 }
 
 export class AlembicControlPlane {
@@ -75,11 +76,14 @@ export class AlembicControlPlane {
   }
 
   async plan(request: PlanRequest): Promise<AlembicPlan> {
+    this.dependencies.phaseObserver?.("project-attestation");
     const project = await attestProject(request);
+    this.dependencies.phaseObserver?.("seedbed-plan");
     return createPlan(
       request,
       this.seedbedFor(project.root, request.seedbedStateRoot),
-      this.dependencies.planDeadlineMs ?? SEEDBED_PLAN_DEADLINE_MS
+      this.dependencies.planDeadlineMs ?? SEEDBED_PLAN_DEADLINE_MS,
+      this.dependencies.phaseObserver
     );
   }
 
@@ -241,6 +245,7 @@ export class AlembicControlPlane {
     packageName: string;
     packageVersion: string;
   }) {
+    this.dependencies.phaseObserver?.("legacy-deadline");
     return boundedOperation(
       "legacy-inspect",
       this.dependencies.legacyInspectDeadlineMs ?? LEGACY_INSPECT_DEADLINE_MS,
@@ -256,7 +261,9 @@ export class AlembicControlPlane {
     packageName: string;
     packageVersion: string;
   }) {
+    this.dependencies.phaseObserver?.("legacy-project-attestation");
     const project = await attestProject(input);
+    this.dependencies.phaseObserver?.("legacy-bundle-scope");
     const bundlePath = await realpath(input.bundlePath);
     const bundleInfo = await lstat(input.bundlePath);
     invariant(
@@ -269,7 +276,9 @@ export class AlembicControlPlane {
       "legacy-bundle-scope",
       "Legacy bundle must be an exact regular file inside the attested project"
     );
+    this.dependencies.phaseObserver?.("legacy-bundle-read");
     const bytes = await readFile(input.bundlePath);
+    this.dependencies.phaseObserver?.("legacy-bundle-validate");
     return inspectLegacyBundle({
       bytes,
       packageName: input.packageName,

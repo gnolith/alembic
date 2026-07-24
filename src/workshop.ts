@@ -21,7 +21,7 @@ import {
 export const WORKSHOP_MIGRATION_SCHEMA_VERSION = 11 as const;
 export const WORKSHOP_OPERATION_SCHEMA_VERSION = 2 as const;
 export const WORKSHOP_CATALOG_DIGEST =
-  "a57799a792a075a5e359567240a7241a48df4155fae3a9e73b092ccf9035955b" as const;
+  "7a66ccb7ed6c5ae33be526a318376b895d2ecb122d7e723fb3117baf8ad66224" as const;
 export const WORKSHOP_TOOL_NAMES = [
   "gnolith_status",
   "authorization_admin",

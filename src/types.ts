@@ -251,7 +251,7 @@ export interface InstallationDiagnosis {
 }
 export interface SeedbedCallOptions {
   signal: AbortSignal;
-  deadlineMs: number;
+  timeoutMs: number;
 }
 export interface SeedbedControl {
   inspect(request: InstallationSelector, options?: SeedbedCallOptions): Promise<InstallationInspection>;

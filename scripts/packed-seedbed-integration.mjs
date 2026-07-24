@@ -53,7 +53,7 @@ try {
   assert.equal(workshopContract.OPERATION_SCHEMA_VERSION, 2);
   assert.equal(
     workshopContract.CATALOG_DIGEST,
-    "a57799a792a075a5e359567240a7241a48df4155fae3a9e73b092ccf9035955b"
+    "7a66ccb7ed6c5ae33be526a318376b895d2ecb122d7e723fb3117baf8ad66224"
   );
   assert.deepEqual(
     workshopContract.operationCatalog.map(({ name }) => name),
@@ -95,7 +95,7 @@ try {
     baseIri: "https://example.test/packed/",
     serverVersion: "0.5.0",
     operationVersion: "11",
-    catalogDigest: "a57799a792a075a5e359567240a7241a48df4155fae3a9e73b092ccf9035955b",
+    catalogDigest: "7a66ccb7ed6c5ae33be526a318376b895d2ecb122d7e723fb3117baf8ad66224",
     migrationReady: true,
     canonicalReady: true,
     authorizationReady: true,
@@ -130,9 +130,9 @@ try {
       kind: "seedbed-local-build-v1",
       selector: "gnolith-seedbed-local-build-v1",
       pullPolicy: "never",
-      componentLockSha256: "58d02ab29cc5befce674e3b43ad7d4cc6e23baedbbfba6dcfb929b693fe62b87",
-      graphSha256: "fb27c985660e8ff66145ad7a15eed0e229d771cf099c91ac25c9743fcdf8bcdc",
-      composeBundleSha256: "213220261f6d2953172ed0d1259dcac854fc36b643e4f78e30000af82d36907e"
+      componentLockSha256: "5dd530e3d33f4d8652ccc9070879b0e143391401b2b87efec8515c3ac9d364dd",
+      graphSha256: "a5e371d1dd4f839bfeee80734b21e68a11b21e423f4b7220b09194a3f71eaad1",
+      composeBundleSha256: "518607f10adb7c319b42ee6ef8987aa3ddf3b0264778ffa909b345d4b6d21500"
     },
     semantic: {
       configuration: semanticConfiguration,
@@ -154,6 +154,10 @@ try {
   const seedbedPlan = await exactSeedbed.plan(docker);
   assert.equal(seedbedPlan.request.image.selector, "gnolith-seedbed-local-build-v1");
   assert.equal(seedbedPlan.request.image.pullPolicy, "never");
+  assert.equal(
+    seedbedPlan.request.semantic.configuration.provider.endpoint,
+    "http://host.docker.internal:43118/mock"
+  );
 
   let semanticReceiptOverride = null;
   const packedSeedbedReceipt = (plan) => ({
@@ -224,9 +228,10 @@ try {
       baseIri: "https://example.test/packed"
     }
   });
-  assert.equal(plan.seedbedLocalBuildTrust.seedbedCandidateSha256, "5d62c83953bfb1a6a96294fe849a38187b723c1183334bf676f04192aa28f9ef");
+  assert.equal(plan.seedbedLocalBuildTrust.seedbedCandidateSha256, "eec1a3f7d94e43ddbcbd238b1d4b82128e39018958fe05bdcba1924a85983776");
   assert.equal(plan.semanticProfile.fingerprint, semanticFingerprint);
   assert.equal(plan.semanticProfile.revision, 1);
+  assert.equal(plan.semanticProfile.providerEndpoint, "http://host.docker.internal:43118/mock");
   assert.equal(JSON.stringify(plan.semanticProfile).includes(semanticCredentialPath), false);
 
   const workshopStatus = {

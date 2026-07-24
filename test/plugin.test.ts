@@ -22,19 +22,40 @@ test("installed MCP initializes as Alembic and lists the exact fixed catalog", a
     stdio: ["pipe", "pipe", "pipe"]
   });
   const lines: string[] = [];
+  let stdout = "";
   child.stdout.setEncoding("utf8");
-  child.stdout.on("data", (chunk: string) => lines.push(...chunk.trim().split("\n")));
+  child.stdout.on("data", (chunk: string) => {
+    stdout += chunk;
+    while (stdout.includes("\n")) {
+      const newline = stdout.indexOf("\n");
+      const line = stdout.slice(0, newline);
+      stdout = stdout.slice(newline + 1);
+      if (line.length > 0) lines.push(line);
+    }
+  });
   child.stdin.write(JSON.stringify({ jsonrpc: "2.0", id: 1, method: "initialize", params: {} }) + "\n");
   child.stdin.write(JSON.stringify({ jsonrpc: "2.0", id: 2, method: "tools/list", params: {} }) + "\n");
+  child.stdin.write(JSON.stringify({
+    jsonrpc: "2.0",
+    id: 3,
+    method: "tools/call",
+    params: { name: "not_an_alembic_tool", arguments: {} }
+  }) + "\n");
   await new Promise((resolve) => setTimeout(resolve, 200));
   child.kill();
-  assert.equal(lines.length >= 2, true);
+  assert.equal(lines.length >= 3, true);
   const initialized = JSON.parse(lines[0]!) as { result: { serverInfo: { name: string }; instructions: string } };
   assert.equal(initialized.result.serverInfo.name, "alembic");
   assert.match(initialized.result.instructions, /never a proxy/u);
   const listed = JSON.parse(lines[1]!) as { result: { tools: { name: string }[] } };
   assert.equal(listed.result.tools.length, 9);
   assert.equal(listed.result.tools.some(({ name }) => name.startsWith("gnolith_")), false);
+  const rejected = JSON.parse(lines[2]!) as {
+    id: number | null;
+    error: { data: { classification: string } };
+  };
+  assert.equal(rejected.id, 3);
+  assert.equal(rejected.error.data.classification, "tool-not-found");
 });
 
 test("plugin installation semantics are project-local and activation requires a new task", async () => {

@@ -28,10 +28,11 @@ Remote services are connect-existing only.
 - Apply is checkpointed, idempotent, resumable, and writes config last.
 - Optional Docker-local semantic configuration is typed, fingerprint-bound,
   selector-only, and reduced to a redacted plan profile. Only the exact
-  profile-approved Compose hosts `ollama:11434` and `qdrant:6333`, plus literal
-  loopback addresses with an explicit port, may use private HTTP when
-  `allowPrivateEndpoint` is explicitly true. DNS aliases, arbitrary private
-  targets, credentials, query strings, fragments, and redirects are rejected.
+  profile-approved Compose hosts `ollama:11434` and `qdrant:6333`, plus caller
+  loopback addresses normalized to `host.docker.internal` with an explicit
+  port, may use private HTTP when `allowPrivateEndpoint` is explicitly true.
+  DNS aliases, arbitrary private targets, credentials, query strings,
+  fragments, and redirects are rejected.
   Protected OpenAI-compatible profiles may verify ready with SQLite, or with
   Qdrant when Seedbed's immutable candidate enables that exact profile. Ollama
   remains degraded unless a separately bound immutable model artifact exists.
@@ -64,9 +65,11 @@ npm run candidate
 ```
 
 `candidate` verifies the exact Seedbed package/component-lock/graph/Compose
-bundle and Workshop package, runs a packed semantic plan/apply/repair,
-Workshop-52/no-pull, and nine-tool Alembic integration, then creates an
-unpublished package archive, CycloneDX SBOM, inventory, and lowercase SHA-256
+bundle and Workshop package, runs packed semantic plan/apply/repair,
+Workshop-52/no-pull, and nine-tool Alembic integration, then drives the actual
+packed stdio MCP through bounded plan and valid/invalid legacy requests. It
+finally creates an unpublished package archive, CycloneDX SBOM, inventory, and
+lowercase SHA-256
 checksums. It never tags, releases, or publishes.
 
 Uninstalling or disabling the Alembic plugin does not remove project config,

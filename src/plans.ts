@@ -47,17 +47,22 @@ export const WAYSTONE_DEFAULT_EVIDENCE: WaystoneEvidenceV1 = {
 export async function createPlan(
   request: PlanRequest,
   seedbed?: SeedbedControl,
-  seedbedDeadlineMs = SEEDBED_PLAN_DEADLINE_MS
+  seedbedDeadlineMs = SEEDBED_PLAN_DEADLINE_MS,
+  phaseObserver?: (stage: string) => void
 ): Promise<AlembicPlan> {
+  phaseObserver?.("plan-validation");
   validatePlanRequest(request);
   const normalized = normalizeRequest(request);
+  phaseObserver?.("plan-project-attestation");
   const project = await attestProject(request);
+  phaseObserver?.("plan-endpoint-policy");
   const endpoint = await approveEndpoint(normalized.endpoint, normalized.mode);
   let seedbedPlan = null;
   if (normalized.mode === "docker-local" && normalized.action !== "remove" && normalized.action !== "adopt") {
     invariant(seedbed !== undefined, "seedbed-required", "Docker-local operations require Seedbed");
     invariant(normalized.docker !== undefined, "docker-request-required", "Docker installation request is required");
     invariant(normalized.docker.endpoint === endpoint.href.replace(/\/$/u, ""), "docker-endpoint-mismatch", "Seedbed endpoint differs from plan");
+    phaseObserver?.("plan-seedbed-control");
     seedbedPlan = await boundedSeedbedCall(
       "plan",
       seedbedDeadlineMs,
@@ -133,7 +138,9 @@ export async function createPlan(
           ]
   };
   const plan: AlembicPlan = { ...unsigned, digest: sha256(canonicalJson(unsigned)) };
+  phaseObserver?.("plan-store-write");
   await new OperationStore(project.root).writePlan(plan);
+  phaseObserver?.("plan-complete");
   return plan;
 }
 
@@ -600,7 +607,12 @@ function semanticProfile(semantic: SeedbedSemanticConfigurationV1): SemanticPlan
 
 function normalizeSemanticEndpoint(value: string): string {
   try {
-    return new URL(value).href.replace(/\/$/u, "");
+    const endpoint = new URL(value);
+    const hostname = endpoint.hostname.toLowerCase();
+    if (hostname === "localhost" || hostname === "127.0.0.1" || hostname === "[::1]") {
+      endpoint.hostname = "host.docker.internal";
+    }
+    return endpoint.href.replace(/\/$/u, "");
   } catch {
     invariant(false, "semantic-endpoint", "Semantic endpoint is invalid");
   }
@@ -614,12 +626,12 @@ function validateSemanticEndpoint(
   const exactCompose = composeService === "ollama"
     ? isExactComposeEndpoint(value, "ollama", "11434")
     : composeService === "qdrant" && isExactComposeEndpoint(value, "qdrant", "6333");
-  const exactLoopback = isExactLoopbackEndpoint(value);
-  if (allowPrivateEndpoint || exactCompose || exactLoopback) {
+  const exactDockerHost = isExactDockerHostEndpoint(value);
+  if (allowPrivateEndpoint || exactCompose || exactDockerHost) {
     invariant(
-      allowPrivateEndpoint === true && (exactCompose || exactLoopback),
+      allowPrivateEndpoint === true && (exactCompose || exactDockerHost),
       "semantic-private-endpoint-denied",
-      "Semantic private endpoint is not an explicitly approved literal loopback or Compose-local target"
+      "Semantic private endpoint is not an explicitly approved Docker host-gateway or Compose-local target"
     );
     return;
   }
@@ -636,12 +648,12 @@ function validateSemanticEndpoint(
   );
 }
 
-function isExactLoopbackEndpoint(value: string): boolean {
+function isExactDockerHostEndpoint(value: string): boolean {
   try {
     const endpoint = new URL(value);
     const hostname = endpoint.hostname.toLowerCase();
     return ["http:", "https:"].includes(endpoint.protocol) &&
-      (hostname === "127.0.0.1" || hostname === "[::1]") &&
+      hostname === "host.docker.internal" &&
       endpoint.port !== "" &&
       endpoint.username === "" &&
       endpoint.password === "" &&

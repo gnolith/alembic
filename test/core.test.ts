@@ -20,6 +20,7 @@ import {
   canonicalBaseIri,
   canonicalBearerSecret
 } from "../src/index.js";
+import { runIsolatedTool } from "../src/tool-isolation.js";
 import { temporaryProject } from "./helpers.js";
 
 test("fixed catalog contains only nine bounded Alembic operations", () => {
@@ -45,6 +46,28 @@ test("base identities and protected bearer text use one canonical spelling", () 
   }
 });
 
+test("isolated MCP tools retain a hard deadline when a dependency blocks", async () => {
+  const startedAt = Date.now();
+  for (const operation of ["plan", "legacy-inspect"] as const) {
+    await assert.rejects(
+      runIsolatedTool(operation, {}, {
+        deadlineMs: 50,
+        workerUrl: new URL("./hanging-worker.js", import.meta.url)
+      }),
+      (error) => {
+        assert.equal((error as { code?: string }).code, `${operation}-timeout`);
+        assert.deepEqual((error as { details?: unknown }).details, {
+          operation,
+          stage: "worker-start",
+          retryable: true
+        });
+        return true;
+      }
+    );
+  }
+  assert.equal(Date.now() - startedAt < 1_000, true);
+});
+
 test("runtime Workshop verification exactly matches the final public candidate lock", async () => {
   const lock = JSON.parse(await readFile(join(process.cwd(), "candidate-lock.json"), "utf8")) as {
     workshop: {
@@ -57,8 +80,8 @@ test("runtime Workshop verification exactly matches the final public candidate l
       containerWorkdir: string;
     };
   };
-  assert.equal(lock.workshop.commit, "66214d4cfb1072ad794e9f2c29acbac06ae52048");
-  assert.equal(lock.workshop.sha256, "f4b203a4c8606bc732ad4b859249b2d5eb63f8993435cb5f07100d401076e3c8");
+  assert.equal(lock.workshop.commit, "423f3a75fe4ee197727866be7c9c6667720cd862");
+  assert.equal(lock.workshop.sha256, "6d297b644b38aaacabb606521a916013ba61c0c7ebb5a0c7980f304caadefa77");
   assert.equal(lock.workshop.migrationSchema, WORKSHOP_MIGRATION_SCHEMA_VERSION);
   assert.equal(lock.workshop.operationSchema, WORKSHOP_OPERATION_SCHEMA_VERSION);
   assert.equal(lock.workshop.catalogSize, WORKSHOP_TOOL_NAMES.length);

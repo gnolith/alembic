@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { join } from "node:path";
 import { readFile, writeFile } from "node:fs/promises";
-import { canonicalJson, inspectLegacyBundle, sha256 } from "../src/index.js";
+import { AlembicError, canonicalJson, inspectLegacyBundle, sha256 } from "../src/index.js";
 import { temporaryProject } from "./helpers.js";
 
 test("legacy canonicalization sorts objects, preserves arrays, and normalizes NFC", () => {
@@ -36,6 +36,13 @@ test("accepts only exact Setup 0.2.0 schema-v1 bundle bound to raw config", asyn
   };
   const bundle = { ...unsigned, sha256: sha256(canonicalJson(unsigned)) };
   const encoded = Buffer.from(JSON.stringify(bundle));
+  await assert.rejects(inspectLegacyBundle({
+    bytes: Buffer.from([0x1f, 0x8b, 0x08, 0x00]),
+    packageName: "@gnolith/codex-plugin",
+    packageVersion: "0.2.0",
+    exactTaskRoot: root,
+    configPath
+  }), (error: unknown) => error instanceof AlembicError && error.code === "legacy-json-format");
   const inspected = await inspectLegacyBundle({
     bytes: encoded,
     packageName: "@gnolith/codex-plugin",
