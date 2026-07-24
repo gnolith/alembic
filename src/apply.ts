@@ -164,7 +164,7 @@ export async function applyPlan(
       invariant(seedbedReceipt.installationId === plan.expected.installationId, "seedbed-identity-changed", "Seedbed identity changed");
       invariant(seedbedReceipt.baseIri === plan.expected.baseIri, "seedbed-base-iri-changed", "Seedbed base IRI changed");
       invariant(
-        canonicalJson(seedbedReceipt.expected) === canonicalJson(plan.expected),
+        canonicalJson(seedbedReceipt.expected) === canonicalJson(plan.seedbedPlan?.request.expected ?? plan.expected),
         "seedbed-readiness-changed",
         "Seedbed expected Workshop evidence changed"
       );
@@ -380,7 +380,7 @@ function validateSeedbedReceipt(
   invariant(seedbedReceipt.installationId === plan.expected.installationId, "seedbed-identity-changed", "Seedbed identity changed");
   invariant(seedbedReceipt.baseIri === plan.expected.baseIri, "seedbed-base-iri-changed", "Seedbed base IRI changed");
   invariant(
-    canonicalJson(seedbedReceipt.expected) === canonicalJson(plan.expected),
+    canonicalJson(seedbedReceipt.expected) === canonicalJson(plan.seedbedPlan.request.expected),
     "seedbed-readiness-changed",
     "Seedbed expected Workshop evidence changed"
   );

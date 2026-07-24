@@ -23,6 +23,10 @@ import {
   type SeedbedControl,
   type WaystoneEvidenceV1
 } from "./types.js";
+import {
+  WORKSHOP_MIGRATION_SCHEMA_VERSION,
+  WORKSHOP_OPERATION_SCHEMA_VERSION
+} from "./workshop.js";
 
 const PLAN_LIFETIME_MS = 15 * 60 * 1000;
 export const COMPATIBILITY = {
@@ -62,11 +66,12 @@ export async function createPlan(
     invariant(seedbed !== undefined, "seedbed-required", "Docker-local operations require Seedbed");
     invariant(normalized.docker !== undefined, "docker-request-required", "Docker installation request is required");
     invariant(normalized.docker.endpoint === endpoint.href.replace(/\/$/u, ""), "docker-endpoint-mismatch", "Seedbed endpoint differs from plan");
+    const seedbedRequest = toSeedbedRequest(normalized.docker);
     phaseObserver?.("plan-seedbed-control");
     seedbedPlan = await boundedSeedbedCall(
       "plan",
       seedbedDeadlineMs,
-      (options) => seedbed.plan(normalized.docker!, options)
+      (options) => seedbed.plan(seedbedRequest, options)
     );
     invariant(
       seedbedPlan.version === "gnolith-seedbed-control-plan-v2",
@@ -80,7 +85,7 @@ export async function createPlan(
       "Seedbed plan must use the exact pinned local-build selector"
     );
     invariant(
-      canonicalJson(seedbedPlan.request) === canonicalJson(normalized.docker),
+      canonicalJson(seedbedPlan.request) === canonicalJson(seedbedRequest),
       "seedbed-plan-request-mismatch",
       "Seedbed plan changed the approved Docker-local request"
     );
@@ -260,6 +265,11 @@ function validatePlanRequest(request: PlanRequest): void {
   for (const value of [request.expected.serverVersion, request.expected.operationVersion]) {
     invariant(validIdentifier(value), "expected-version", "Expected version evidence is invalid");
   }
+  invariant(
+    request.expected.operationVersion === String(WORKSHOP_OPERATION_SCHEMA_VERSION),
+    "expected-operation-schema",
+    "Expected Workshop operation schema is incompatible"
+  );
   if (request.docker) {
     exactAllowedKeys(
       request.docker,
@@ -439,6 +449,18 @@ function normalizeRequest(request: PlanRequest): PlanRequest {
     };
   }
   return normalized;
+}
+
+function toSeedbedRequest(request: NonNullable<PlanRequest["docker"]>): NonNullable<PlanRequest["docker"]> {
+  return {
+    ...request,
+    image: { ...request.image },
+    ...(request.semantic === undefined ? {} : { semantic: request.semantic }),
+    expected: {
+      ...request.expected,
+      operationVersion: String(WORKSHOP_MIGRATION_SCHEMA_VERSION)
+    }
+  };
 }
 
 export function semanticFingerprint(configuration: SemanticConfigurationV1): string {

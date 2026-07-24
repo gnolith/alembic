@@ -11,11 +11,47 @@ export async function boundedSeedbedCall<T>(
   deadlineMs: number,
   invoke: (options: SeedbedCallOptions) => Promise<T>
 ): Promise<T> {
-  return boundedOperation(
-    `seedbed-${operation}`,
-    deadlineMs,
-    (signal) => invoke({ signal, timeoutMs: deadlineMs })
-  );
+  try {
+    return await boundedOperation(
+      `seedbed-${operation}`,
+      deadlineMs,
+      (signal) => invoke({ signal, timeoutMs: deadlineMs })
+    );
+  } catch (error) {
+    if (error instanceof AlembicError) throw error;
+    throw new AlembicError(
+      "seedbed-control-rejected",
+      "SeedbedControl rejected the approved operation",
+      {
+        operation,
+        phase: `seedbed-${operation}`,
+        upstream: {
+          code: classifySeedbedControlError(error),
+          phase: operation
+        },
+        retryable: false
+      }
+    );
+  }
+}
+
+function classifySeedbedControlError(error: unknown): string {
+  if (!(error instanceof TypeError)) return "seedbed-control-error";
+  switch (error.message) {
+    case "Expected Workshop versions or catalog do not match immutable Seedbed policy":
+      return "seedbed-request-compatibility";
+    case "An installation without semantic configuration must explicitly expect lexical-only operation":
+      return "seedbed-request-lexical-acceptance";
+    case "Seedbed local endpoint must be credential-free host IPv4 loopback /mcp":
+    case "Seedbed local endpoint must include an explicit port":
+      return "seedbed-request-endpoint";
+    case "Docker installation request local-build attestations do not match immutable Seedbed policy":
+      return "seedbed-request-local-build";
+    case "Expected Workshop identity does not match installation request":
+      return "seedbed-request-identity";
+    default:
+      return "seedbed-request-invalid";
+  }
 }
 
 export async function boundedOperation<T>(

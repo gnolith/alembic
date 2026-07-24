@@ -94,7 +94,7 @@ try {
     installationId: "packed-integration",
     baseIri: "https://example.test/packed/",
     serverVersion: "0.5.0",
-    operationVersion: "11",
+    operationVersion: "2",
     catalogDigest: "7a66ccb7ed6c5ae33be526a318376b895d2ecb122d7e723fb3117baf8ad66224",
     migrationReady: true,
     canonicalReady: true,
@@ -105,6 +105,7 @@ try {
     semanticState: "ready",
     allowLexicalOnly: false
   };
+  const seedbedExpected = { ...expected, operationVersion: "11" };
   const semanticConfiguration = {
     version: 1,
     id: "packed-semantic",
@@ -130,9 +131,9 @@ try {
       kind: "seedbed-local-build-v1",
       selector: "gnolith-seedbed-local-build-v1",
       pullPolicy: "never",
-      componentLockSha256: "751c2afd492336aab83e8ed5641561fbae9d190c5d69b31b1e65b700ee082ca4",
-      graphSha256: "b2dd029e70fc77859640d7c619776bbdb08e93ea6164641faea6fa966f083ab7",
-      composeBundleSha256: "55a0b0aed5fd66c74d3c9cdf2e21155843181e5b84a3d79aa364827cb5ff66de"
+      componentLockSha256: "3a4af57aae27206b90c7f2f7db9cd72607b982aca5a9c5f44d7604ee7a00bc20",
+      graphSha256: "14011e9d051e6c310fdb47d4c65cd1dc8597b9906f802070cbdf4df849e5ce58",
+      composeBundleSha256: "7c3e0e3b7ca9d1ba7170c526092e3cd928560248396e37fa64daa5998e57fdc2"
     },
     semantic: {
       configuration: semanticConfiguration,
@@ -151,7 +152,10 @@ try {
     throw new Error("Packed integration forbids network access");
   };
   process.env.PATH = emptyPath;
-  const seedbedPlan = await exactSeedbed.plan(docker);
+  const seedbedPlan = await exactSeedbed.plan({
+    ...docker,
+    expected: seedbedExpected
+  });
   assert.equal(seedbedPlan.request.image.selector, "gnolith-seedbed-local-build-v1");
   assert.equal(seedbedPlan.request.image.pullPolicy, "never");
   assert.equal(
@@ -228,7 +232,7 @@ try {
       baseIri: "https://example.test/packed"
     }
   });
-  assert.equal(plan.seedbedLocalBuildTrust.seedbedCandidateSha256, "5861febd801f5c3d8b8b02c1981f55fdbc39d81720b9f376b8c6bb1a83d0296d");
+  assert.equal(plan.seedbedLocalBuildTrust.seedbedCandidateSha256, "def6a1900a4e8452dd0fcdee9125d5c0bca6fafeaf3599e3c5cd66047a1db93a");
   assert.equal(plan.semanticProfile.fingerprint, semanticFingerprint);
   assert.equal(plan.semanticProfile.revision, 1);
   assert.equal(plan.semanticProfile.providerEndpoint, "http://host.docker.internal:43118/mock");

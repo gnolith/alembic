@@ -21,6 +21,7 @@ import {
   canonicalBearerSecret
 } from "../src/index.js";
 import { runIsolatedTool } from "../src/tool-isolation.js";
+import { boundedSeedbedCall } from "../src/seedbed-call.js";
 import { temporaryProject } from "./helpers.js";
 
 test("fixed catalog contains only nine bounded Alembic operations", () => {
@@ -68,6 +69,28 @@ test("isolated MCP tools retain a hard deadline when a dependency blocks", async
   assert.equal(Date.now() - startedAt < 1_000, true);
 });
 
+test("SeedbedControl rejections retain only bounded code and phase evidence", async () => {
+  await assert.rejects(
+    boundedSeedbedCall("plan", 100, async () => {
+      throw new TypeError("Expected Workshop versions or catalog do not match immutable Seedbed policy");
+    }),
+    (error) => {
+      assert.equal((error as { code?: string }).code, "seedbed-control-rejected");
+      assert.deepEqual((error as { details?: unknown }).details, {
+        operation: "plan",
+        phase: "seedbed-plan",
+        upstream: {
+          code: "seedbed-request-compatibility",
+          phase: "plan"
+        },
+        retryable: false
+      });
+      assert.doesNotMatch(JSON.stringify(error), /versions or catalog/u);
+      return true;
+    }
+  );
+});
+
 test("runtime Workshop verification exactly matches the final public candidate lock", async () => {
   const lock = JSON.parse(await readFile(join(process.cwd(), "candidate-lock.json"), "utf8")) as {
     workshop: {
@@ -80,8 +103,8 @@ test("runtime Workshop verification exactly matches the final public candidate l
       containerWorkdir: string;
     };
   };
-  assert.equal(lock.workshop.commit, "423f3a75fe4ee197727866be7c9c6667720cd862");
-  assert.equal(lock.workshop.sha256, "6d297b644b38aaacabb606521a916013ba61c0c7ebb5a0c7980f304caadefa77");
+  assert.equal(lock.workshop.commit, "13db3690053bea331d341f6f848d2641441ecc0c");
+  assert.equal(lock.workshop.sha256, "1a59399eb253b7085d581726f3e9314ecbe5c52f4780fb14e43df1af8df484b3");
   assert.equal(lock.workshop.migrationSchema, WORKSHOP_MIGRATION_SCHEMA_VERSION);
   assert.equal(lock.workshop.operationSchema, WORKSHOP_OPERATION_SCHEMA_VERSION);
   assert.equal(lock.workshop.catalogSize, WORKSHOP_TOOL_NAMES.length);
