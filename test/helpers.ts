@@ -2,6 +2,7 @@ import { mkdtemp, mkdir, realpath, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { canonicalJson, sha256 } from "../src/canonical.js";
+import { semanticFingerprint } from "../src/plans.js";
 import type {
   DockerInstallationRequest,
   ExpectedWorkshopStatus,
@@ -129,7 +130,15 @@ export class MockSeedbed implements SeedbedControl {
     return this.receipt(await this.plan(request));
   }
   async diagnose() {
-    return { installationId: expectedStatus.installationId, classification: "ready", restartAllowed: true };
+    return {
+      installationId: expectedStatus.installationId,
+      classification: "local-workshop-unavailable",
+      repair: {
+        kind: "seedbed-resume-operation-v1" as const,
+        operationId: "seedbed-plan",
+        action: "restart-recorded-compose" as const
+      }
+    };
   }
   private receipt(plan: InstallationPlan): InstallationReceipt {
     return {
@@ -141,6 +150,18 @@ export class MockSeedbed implements SeedbedControl {
       installationId: plan.request.installationId,
       baseIri: plan.request.baseIri,
       expected: plan.request.expected,
+      ...(plan.request.semantic
+        ? {
+            semantic: {
+              fingerprint: semanticFingerprint(plan.request.semantic.configuration),
+              revision: plan.request.semantic.expectedRevision + 1,
+              state:
+                plan.request.expected.semanticState === "absent"
+                  ? "unconfigured" as const
+                  : plan.request.expected.semanticState
+            }
+          }
+        : {}),
       protectedTokenFile: {
         kind: "protected-file",
         canonicalPath: this.tokenPath,

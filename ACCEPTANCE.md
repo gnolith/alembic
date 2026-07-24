@@ -26,3 +26,5 @@
 | ALE-AR-022 | Remote protected-resource metadata, issuer/audience/scopes/algorithm checks and host OAuth emit only `auth = "oauth"` with no fallback. |
 | ALE-AR-023 | Docker-local accepts only Seedbed's exact never-pulled versioned local-build selector, binds candidate/component-lock/graph/Compose bundle digests, and keeps registry images digest-qualified. |
 | ALE-AR-024 | Packed exact Alembic+Seedbed plan/apply tests reject tampered selector/component-lock/graph evidence, observe no network pull, and smoke the fixed nine-tool MCP catalog. |
+| ALE-AR-025 | Optional SemanticConfigurationV1 is normalized, fingerprint/profile-bound, selector-only, and rejects arbitrary private provider/vector targets. |
+| ALE-AR-026 | Completed local repair resumes only the recorded Seedbed operation and requires fresh authenticated Workshop verification; stopped and repair-failed outcomes are stable and redacted. |

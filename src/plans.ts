@@ -1,4 +1,5 @@
 import { canonicalJson, operationId, planId, sha256 } from "./canonical.js";
+import { isAbsolute, normalize, resolve } from "node:path";
 import { approveEndpoint } from "./endpoint.js";
 import { invariant } from "./errors.js";
 import { attestProject } from "./project.js";
@@ -15,6 +16,9 @@ import {
   LOCAL_BEARER_ENV,
   type AlembicPlan,
   type PlanRequest,
+  type SemanticConfigurationV1,
+  type SemanticPlanProfileV1,
+  type SeedbedSemanticConfigurationV1,
   type SeedbedControl
 } from "./types.js";
 
@@ -83,6 +87,9 @@ export async function createPlan(request: PlanRequest, seedbed?: SeedbedControl)
     seedbedPlan,
     seedbedPlanDigest: seedbedPlan?.digest ?? null,
     seedbedLocalBuildTrust: seedbedPlan === null ? null : SEEDBED_LOCAL_BUILD_TRUST,
+    semanticProfile: normalized.docker?.semantic
+      ? semanticProfile(normalized.docker.semantic)
+      : null,
     seedbedStateRoot: normalized.seedbedStateRoot ?? null,
     legacyAdoption: normalized.legacyAdoption ?? null,
     legacyHandoff: normalized.legacyHandoff ?? null,
@@ -125,12 +132,19 @@ export function verifyPlan(plan: AlembicPlan): void {
       "Seedbed local-build trust evidence is absent"
     );
     verifySeedbedLocalBuildTrust(plan.seedbedLocalBuildTrust);
+    const semantic = plan.seedbedPlan.request.semantic;
+    invariant(
+      canonicalJson(plan.semanticProfile) === canonicalJson(semantic ? semanticProfile(semantic) : null),
+      "semantic-plan-binding-mismatch",
+      "Semantic profile differs from the approved Seedbed plan"
+    );
   } else {
     invariant(
       plan.seedbedLocalBuildTrust === null,
       "seedbed-local-build-trust-unexpected",
       "Seedbed local-build trust evidence is not applicable"
     );
+    invariant(plan.semanticProfile === null, "semantic-profile-unexpected", "Semantic profile is not applicable");
   }
 }
 
@@ -184,7 +198,11 @@ function validatePlanRequest(request: PlanRequest): void {
     invariant(validIdentifier(value), "expected-version", "Expected version evidence is invalid");
   }
   if (request.docker) {
-    exactAllowedKeys(request.docker, ["installationId", "baseIri", "endpoint", "image", "expected"], "Docker request");
+    exactAllowedKeys(
+      request.docker,
+      ["installationId", "baseIri", "endpoint", "image", "semantic", "expected"],
+      "Docker request"
+    );
     exactAllowedKeys(
       request.docker.image,
       request.docker.image.kind === "seedbed-local-build-v1"
@@ -211,6 +229,7 @@ function validatePlanRequest(request: PlanRequest): void {
       "unpinned-image",
       "Docker-local requires the exact attested Seedbed local build or a digest-qualified pulled image"
     );
+    if (request.docker.semantic !== undefined) validateSemanticConfiguration(request.docker.semantic);
   }
   if (request.action === "adopt") {
     invariant(request.legacyHandoff !== undefined, "legacy-handoff-required", "Adoption requires the exact inspected legacy handoff binding");
@@ -303,6 +322,9 @@ function normalizeRequest(request: PlanRequest): PlanRequest {
       baseIri: request.docker.baseIri,
       endpoint: request.docker.endpoint,
       image: { ...request.docker.image },
+      ...(request.docker.semantic !== undefined
+        ? { semantic: normalizeSemanticConfiguration(request.docker.semantic) }
+        : {}),
       expected: { ...expected }
     };
   }
@@ -333,4 +355,253 @@ function normalizeRequest(request: PlanRequest): PlanRequest {
     };
   }
   return normalized;
+}
+
+export function semanticFingerprint(configuration: SemanticConfigurationV1): string {
+  const normalized = normalizeSemanticCore(configuration);
+  return sha256(canonicalJson({
+    version: 1,
+    provider: normalized.provider,
+    vector: normalized.vector
+  }));
+}
+
+function validateSemanticConfiguration(semantic: SeedbedSemanticConfigurationV1): void {
+  exactAllowedKeys(
+    semantic,
+    ["configuration", "expectedRevision", "credentialSelectors"],
+    "Seedbed semantic configuration"
+  );
+  invariant(
+    Number.isSafeInteger(semantic.expectedRevision) &&
+      semantic.expectedRevision >= 0 &&
+      semantic.expectedRevision < Number.MAX_SAFE_INTEGER,
+    "semantic-revision",
+    "Semantic expected revision is invalid"
+  );
+  const configuration = normalizeSemanticCore(semantic.configuration);
+  invariant(
+    semantic.credentialSelectors.length <= 16,
+    "semantic-selector-bound",
+    "Semantic credential selector count exceeds the bound"
+  );
+  const selectorIds = new Set<string>();
+  for (const selector of semantic.credentialSelectors) {
+    exactAllowedKeys(selector, ["id", "kind", "path"], "semantic credential selector");
+    invariant(
+      validIdentifier(selector.id) &&
+        !selectorIds.has(selector.id) &&
+        selector.kind === "protected-file-v1" &&
+        isAbsolute(selector.path) &&
+        normalize(selector.path) === resolve(selector.path) &&
+        selector.path === selector.path.normalize("NFC"),
+      "semantic-selector-invalid",
+      "Semantic credential selector is invalid"
+    );
+    selectorIds.add(selector.id);
+  }
+  const referenced = new Set<string>();
+  if (configuration.provider.credentialSelector !== null) {
+    referenced.add(configuration.provider.credentialSelector);
+  }
+  if (configuration.vector.kind === "qdrant" &&
+      configuration.vector.credentialSelector !== null) {
+    referenced.add(configuration.vector.credentialSelector);
+  }
+  invariant(
+    [...referenced].every((id) => selectorIds.has(id)),
+    "semantic-selector-missing",
+    "Semantic configuration references an absent credential selector"
+  );
+  invariant(
+    referenced.size === selectorIds.size && [...selectorIds].every((id) => referenced.has(id)),
+    "semantic-selector-unused",
+    "Semantic configuration contains an unreferenced credential selector"
+  );
+}
+
+function normalizeSemanticConfiguration(
+  semantic: SeedbedSemanticConfigurationV1
+): SeedbedSemanticConfigurationV1 {
+  validateSemanticConfiguration(semantic);
+  return {
+    configuration: normalizeSemanticCore(semantic.configuration),
+    expectedRevision: semantic.expectedRevision,
+    credentialSelectors: [...semantic.credentialSelectors]
+      .map((selector) => ({ ...selector }))
+      .sort((left, right) => left.id.localeCompare(right.id))
+  };
+}
+
+function normalizeSemanticCore(configuration: SemanticConfigurationV1): SemanticConfigurationV1 {
+  exactAllowedKeys(configuration, ["version", "id", "name", "provider", "vector"], "semantic configuration");
+  invariant(
+    configuration.version === 1 &&
+      validIdentifier(configuration.id) &&
+      validIdentifier(configuration.name),
+    "semantic-version",
+    "Semantic configuration identity or version is invalid"
+  );
+  exactAllowedKeys(
+    configuration.provider,
+    [
+      "kind", "endpoint", "model", "dimensions", "metric", "credentialSelector",
+      "allowPrivateEndpoint", "redirectPolicy"
+    ],
+    "semantic provider"
+  );
+  invariant(
+    ["openai-compatible", "ollama-compatible"].includes(configuration.provider.kind) &&
+      validIdentifier(configuration.provider.model) &&
+      Number.isSafeInteger(configuration.provider.dimensions) &&
+      configuration.provider.dimensions > 0 &&
+      configuration.provider.dimensions <= 65536 &&
+      ["cosine", "dot", "euclid"].includes(configuration.provider.metric) &&
+      (configuration.provider.credentialSelector === null ||
+        validIdentifier(configuration.provider.credentialSelector)) &&
+      configuration.provider.redirectPolicy === "error",
+    "semantic-provider",
+    "Semantic provider configuration is invalid"
+  );
+  const providerEndpoint = normalizeSemanticEndpoint(configuration.provider.endpoint);
+  validateSemanticEndpoint(
+    providerEndpoint,
+    configuration.provider.allowPrivateEndpoint,
+    configuration.provider.kind === "ollama-compatible" ? "ollama" : null
+  );
+
+  let vector: SemanticConfigurationV1["vector"];
+  if (configuration.vector.kind === "sqlite") {
+    exactAllowedKeys(configuration.vector, ["kind"], "SQLite semantic vector");
+    vector = { kind: "sqlite" };
+  } else {
+    exactAllowedKeys(
+      configuration.vector,
+      [
+        "kind", "endpoint", "collection", "credentialSelector",
+        "allowPrivateEndpoint", "redirectPolicy"
+      ],
+      "Qdrant semantic vector"
+    );
+    invariant(
+      configuration.vector.kind === "qdrant" &&
+        validIdentifier(configuration.vector.collection) &&
+        (configuration.vector.credentialSelector === null ||
+          validIdentifier(configuration.vector.credentialSelector)) &&
+        configuration.vector.redirectPolicy === "error",
+      "semantic-vector",
+      "Semantic vector configuration is invalid"
+    );
+    const vectorEndpoint = normalizeSemanticEndpoint(configuration.vector.endpoint);
+    validateSemanticEndpoint(vectorEndpoint, configuration.vector.allowPrivateEndpoint, "qdrant");
+    vector = { ...configuration.vector, endpoint: vectorEndpoint };
+  }
+  return {
+    version: 1,
+    id: configuration.id,
+    name: configuration.name,
+    provider: { ...configuration.provider, endpoint: providerEndpoint },
+    vector
+  };
+}
+
+function semanticProfile(semantic: SeedbedSemanticConfigurationV1): SemanticPlanProfileV1 {
+  const normalized = normalizeSemanticConfiguration(semantic);
+  const configuration = normalized.configuration;
+  return {
+    format: "gnolith-alembic-semantic-profile-v1",
+    revision: normalized.expectedRevision + 1,
+    fingerprint: semanticFingerprint(configuration),
+    configurationId: configuration.id,
+    providerKind: configuration.provider.kind,
+    vectorKind: configuration.vector.kind,
+    providerEndpoint: configuration.provider.endpoint,
+    vectorEndpoint: configuration.vector.kind === "qdrant" ? configuration.vector.endpoint : null,
+    credentialSelectorIds: normalized.credentialSelectors.map(({ id }) => id)
+  };
+}
+
+function normalizeSemanticEndpoint(value: string): string {
+  try {
+    return new URL(value).href.replace(/\/$/u, "");
+  } catch {
+    invariant(false, "semantic-endpoint", "Semantic endpoint is invalid");
+  }
+}
+
+function validateSemanticEndpoint(
+  value: string,
+  allowPrivateEndpoint: boolean,
+  composeService: "ollama" | "qdrant" | null
+): void {
+  const exactCompose = composeService === "ollama"
+    ? isExactComposeEndpoint(value, "ollama", "11434")
+    : composeService === "qdrant" && isExactComposeEndpoint(value, "qdrant", "6333");
+  if (allowPrivateEndpoint || exactCompose) {
+    invariant(
+      allowPrivateEndpoint === true && exactCompose,
+      "semantic-private-endpoint-denied",
+      "Semantic private endpoint is not the explicitly approved Compose-local profile target"
+    );
+    return;
+  }
+  const endpoint = new URL(value);
+  invariant(
+    endpoint.protocol === "https:" &&
+      endpoint.username === "" &&
+      endpoint.password === "" &&
+      endpoint.search === "" &&
+      endpoint.hash === "" &&
+      isPublicSemanticHostname(endpoint.hostname),
+    "semantic-public-endpoint-denied",
+    "Semantic public endpoint must be credential-free HTTPS with a public hostname"
+  );
+}
+
+function isPublicSemanticHostname(hostname: string): boolean {
+  const host = hostname.toLowerCase().replace(/^\[(.*)\]$/u, "$1");
+  if (
+    host === "localhost" ||
+    [".localhost", ".local", ".internal", ".home", ".lan"].some((suffix) => host.endsWith(suffix)) ||
+    !host.includes(".")
+  ) {
+    return false;
+  }
+  if (/^\d{1,3}(?:\.\d{1,3}){3}$/u.test(host)) {
+    const octets = host.split(".").map(Number);
+    const first = octets[0] ?? -1;
+    const second = octets[1] ?? -1;
+    return octets.every((part) => part >= 0 && part <= 255) &&
+      first !== 10 &&
+      first !== 127 &&
+      !(first === 100 && second >= 64 && second <= 127) &&
+      !(first === 169 && second === 254) &&
+      !(first === 172 && second >= 16 && second <= 31) &&
+      !(first === 192 && second === 0) &&
+      !(first === 192 && second === 168) &&
+      !(first === 198 && (second === 18 || second === 19)) &&
+      first < 224 &&
+      first !== 0;
+  }
+  return !host.includes(":");
+}
+
+function isExactComposeEndpoint(
+  value: string,
+  expectedHostname: "ollama" | "qdrant",
+  expectedPort: "11434" | "6333"
+): boolean {
+  try {
+    const endpoint = new URL(value);
+    return endpoint.protocol === "http:" &&
+      endpoint.hostname === expectedHostname &&
+      endpoint.port === expectedPort &&
+      (endpoint.pathname === "/" || endpoint.pathname === "") &&
+      endpoint.username === "" &&
+      endpoint.password === "" &&
+      endpoint.search === "" &&
+      endpoint.hash === "";
+  } catch {
+    return false;
+  }
 }

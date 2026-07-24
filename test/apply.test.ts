@@ -2,7 +2,17 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { join } from "node:path";
 import { readFile } from "node:fs/promises";
-import { applyPlan, canonicalJson, createPlan, inspectConfig, resumeOperation, sha256, verifyPlan } from "../src/index.js";
+import {
+  AlembicControlPlane,
+  applyPlan,
+  canonicalJson,
+  createPlan,
+  inspectConfig,
+  resumeOperation,
+  semanticFingerprint,
+  sha256,
+  verifyPlan
+} from "../src/index.js";
 import {
   localBuildSelection,
   MockSeedbed,
@@ -103,6 +113,109 @@ test("activation prerequisite resumes the exact operation idempotently", async (
   assert.equal(seedbed.resumed, 1);
   const repeated = await applyPlan(plan, { seedbed, workshopTransport: new MockWorkshop() });
   assert.deepEqual(repeated, resumed);
+});
+
+test("completed local repair resumes the recorded Seedbed operation and freshly verifies Workshop", async () => {
+  const root = await temporaryProject();
+  const protectedCredential = await protectedToken(root);
+  process.env.GNOLITH_BEARER_TOKEN = protectedCredential.token;
+  const seedbed = new MockSeedbed(protectedCredential.path, protectedCredential.digest);
+  const docker = {
+    installationId: expectedStatus.installationId,
+    baseIri: expectedStatus.baseIri,
+    endpoint: "http://127.0.0.1/mcp",
+    image: localBuildSelection,
+    expected: expectedStatus
+  };
+  const plan = await createPlan({
+    taskDirectory: root,
+    confirmedProjectRoot: root,
+    action: "repair",
+    mode: "docker-local",
+    endpoint: docker.endpoint,
+    authentication: { kind: "environment", variable: "GNOLITH_BEARER_TOKEN" },
+    expected: expectedStatus,
+    docker
+  }, seedbed);
+  const initial = await applyPlan(plan, { seedbed, workshopTransport: new MockWorkshop() });
+  assert.equal(initial.state, "activation-required");
+  const stoppedWorkshop = {
+    async call() {
+      throw new Error("ECONNREFUSED secret-path-must-not-surface");
+    }
+  };
+  await assert.rejects(
+    resumeOperation(root, plan.operationId, { seedbed, workshopTransport: stoppedWorkshop }),
+    (error) => {
+      assert.equal((error as { code?: string }).code, "workshop-stopped");
+      assert.doesNotMatch(String((error as Error).message), /ECONNREFUSED|secret-path/u);
+      return true;
+    }
+  );
+  assert.equal(seedbed.resumed, 1);
+  const diagnosis = await new AlembicControlPlane({ seedbed }).diagnose({
+    taskDirectory: root,
+    confirmedProjectRoot: root,
+    operationId: plan.operationId,
+    installationId: expectedStatus.installationId
+  });
+  assert.equal(diagnosis.classification, "workshop-stopped");
+  assert.equal(diagnosis.repair, "resume-exact-operation");
+  const repaired = await resumeOperation(root, plan.operationId, {
+    seedbed,
+    workshopTransport: new MockWorkshop()
+  });
+  assert.equal(repaired.state, "activation-required");
+  assert.equal(repaired.failureClassification, "none");
+  assert.match(repaired.message, /freshly verified/u);
+  assert.equal(seedbed.resumed, 2);
+  assert.equal(repaired.configAfterDigest, initial.configAfterDigest);
+});
+
+test("recorded Seedbed repair failure is stable, redacted, and retryable", async () => {
+  class FailingResumeSeedbed extends MockSeedbed {
+    override async resume(): Promise<never> {
+      throw new Error("docker secret internal failure");
+    }
+  }
+  const root = await temporaryProject();
+  const protectedCredential = await protectedToken(root);
+  process.env.GNOLITH_BEARER_TOKEN = protectedCredential.token;
+  const seedbed = new FailingResumeSeedbed(protectedCredential.path, protectedCredential.digest);
+  const docker = {
+    installationId: expectedStatus.installationId,
+    baseIri: expectedStatus.baseIri,
+    endpoint: "http://127.0.0.1/mcp",
+    image: localBuildSelection,
+    expected: expectedStatus
+  };
+  const plan = await createPlan({
+    taskDirectory: root,
+    confirmedProjectRoot: root,
+    action: "repair",
+    mode: "docker-local",
+    endpoint: docker.endpoint,
+    authentication: { kind: "environment", variable: "GNOLITH_BEARER_TOKEN" },
+    expected: expectedStatus,
+    docker
+  }, seedbed);
+  await applyPlan(plan, { seedbed, workshopTransport: new MockWorkshop() });
+  await assert.rejects(
+    resumeOperation(root, plan.operationId, { seedbed, workshopTransport: new MockWorkshop() }),
+    (error) => {
+      assert.equal((error as { code?: string }).code, "seedbed-repair-failed");
+      assert.doesNotMatch(String((error as Error).message), /docker secret internal/u);
+      return true;
+    }
+  );
+  const diagnosis = await new AlembicControlPlane({ seedbed }).diagnose({
+    taskDirectory: root,
+    confirmedProjectRoot: root,
+    operationId: plan.operationId,
+    installationId: expectedStatus.installationId
+  });
+  assert.equal(diagnosis.classification, "repair-failed");
+  assert.equal(diagnosis.repair, "resume-exact-operation");
 });
 
 test("concurrent config change invalidates a bound plan before Seedbed mutation", async () => {
@@ -262,6 +375,183 @@ test("local-build trust accepts only the exact Seedbed selector and rejects tamp
       }
     }, seedbed),
     /exact pinned local-build selector/u
+  );
+});
+
+test("semantic planning binds a redacted profile and only approved Compose-private endpoints", async () => {
+  const root = await temporaryProject();
+  const protectedCredential = await protectedToken(root);
+  process.env.GNOLITH_BEARER_TOKEN = protectedCredential.token;
+  const seedbed = new MockSeedbed(protectedCredential.path, protectedCredential.digest);
+  const configuration = {
+    version: 1 as const,
+    id: "semantic-main",
+    name: "Semantic Main",
+    provider: {
+      kind: "ollama-compatible" as const,
+      endpoint: "http://ollama:11434",
+      model: "nomic-embed-text",
+      dimensions: 768,
+      metric: "cosine" as const,
+      credentialSelector: null,
+      allowPrivateEndpoint: true,
+      redirectPolicy: "error" as const
+    },
+    vector: {
+      kind: "qdrant" as const,
+      endpoint: "http://qdrant:6333",
+      collection: "gnolith-semantic",
+      credentialSelector: null,
+      allowPrivateEndpoint: true,
+      redirectPolicy: "error" as const
+    }
+  };
+  const semantic = {
+    configuration,
+    expectedRevision: 2,
+    credentialSelectors: []
+  };
+  const docker = {
+    installationId: expectedStatus.installationId,
+    baseIri: expectedStatus.baseIri,
+    endpoint: "http://127.0.0.1/mcp",
+    image: localBuildSelection,
+    semantic,
+    expected: expectedStatus
+  };
+  const request = {
+    taskDirectory: root,
+    confirmedProjectRoot: root,
+    action: "create" as const,
+    mode: "docker-local" as const,
+    endpoint: docker.endpoint,
+    authentication: { kind: "environment" as const, variable: "GNOLITH_BEARER_TOKEN" as const },
+    expected: expectedStatus,
+    docker
+  };
+  const plan = await createPlan(request, seedbed);
+  assert.deepEqual(plan.semanticProfile, {
+    format: "gnolith-alembic-semantic-profile-v1",
+    revision: 3,
+    fingerprint: semanticFingerprint(configuration),
+    configurationId: "semantic-main",
+    providerKind: "ollama-compatible",
+    vectorKind: "qdrant",
+    providerEndpoint: "http://ollama:11434",
+    vectorEndpoint: "http://qdrant:6333",
+    credentialSelectorIds: []
+  });
+  assert.doesNotMatch(JSON.stringify(plan.semanticProfile), /protected-token|canonical_token/u);
+  const receipt = await applyPlan(plan, {
+    seedbed,
+    workshopTransport: new MockWorkshop({
+      ...workshopStatus,
+      semanticState: {
+        state: "ready",
+        configured: true,
+        revision: 3,
+        fingerprint: semanticFingerprint(configuration),
+        ready: true
+      }
+    })
+  });
+  assert.equal(receipt.state, "activation-required");
+
+  const badPrivate = {
+    ...semantic,
+    configuration: {
+      ...semantic.configuration,
+      provider: { ...semantic.configuration.provider, endpoint: "http://10.0.0.9:11434" }
+    }
+  };
+  await assert.rejects(
+    createPlan({
+      ...request,
+      docker: { ...docker, semantic: badPrivate }
+    }, seedbed),
+    /explicitly approved Compose-local profile target/u
+  );
+  await assert.rejects(
+    createPlan({
+      ...request,
+      docker: {
+        ...docker,
+        semantic: {
+          ...semantic,
+          credentialSelectors: [{
+            id: "forbidden-secret",
+            kind: "protected-file-v1",
+            path: protectedCredential.path,
+            value: "SECRET_VALUE_MUST_BE_REJECTED"
+          }]
+        }
+      }
+    } as unknown as Parameters<typeof createPlan>[0], seedbed),
+    /unapproved field/u
+  );
+
+  const publicSemantic = {
+    configuration: {
+      version: 1 as const,
+      id: "semantic-public",
+      name: "Semantic Public",
+      provider: {
+        kind: "openai-compatible" as const,
+        endpoint: "https://api.example.test/v1/",
+        model: "text-embedding-model",
+        dimensions: 1536,
+        metric: "cosine" as const,
+        credentialSelector: "openai-api-key",
+        allowPrivateEndpoint: false,
+        redirectPolicy: "error" as const
+      },
+      vector: { kind: "sqlite" as const }
+    },
+    expectedRevision: 0,
+    credentialSelectors: [{
+      id: "openai-api-key",
+      kind: "protected-file-v1" as const,
+      path: protectedCredential.path
+    }]
+  };
+  const publicPlan = await createPlan({
+    ...request,
+    docker: { ...docker, semantic: publicSemantic }
+  }, seedbed);
+  assert.equal(publicPlan.semanticProfile?.providerEndpoint, "https://api.example.test/v1");
+  assert.deepEqual(publicPlan.semanticProfile?.credentialSelectorIds, ["openai-api-key"]);
+  assert.equal(JSON.stringify(publicPlan.semanticProfile).includes(protectedCredential.path), false);
+
+  await assert.rejects(
+    createPlan({
+      ...request,
+      docker: {
+        ...docker,
+        semantic: {
+          ...publicSemantic,
+          configuration: {
+            ...publicSemantic.configuration,
+            provider: {
+              ...publicSemantic.configuration.provider,
+              endpoint: "https://192.168.1.40/v1"
+            }
+          }
+        }
+      }
+    }, seedbed),
+    /public endpoint/u
+  );
+
+  const changed = {
+    ...plan,
+    semanticProfile: { ...plan.semanticProfile!, revision: 4 }
+  };
+  const unsigned = Object.fromEntries(
+    Object.entries(changed).filter(([key]) => key !== "digest")
+  ) as Omit<typeof changed, "digest">;
+  assert.throws(
+    () => verifyPlan({ ...unsigned, digest: sha256(canonicalJson(unsigned)) }),
+    /Semantic profile differs/u
   );
 });
 

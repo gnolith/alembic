@@ -109,28 +109,42 @@ try {
   await writeFile(tokenPath, `${token}\n`, { mode: 0o600 });
   if (process.platform !== "win32") await chmod(tokenPath, 0o600);
   process.env.GNOLITH_BEARER_TOKEN = token;
+  const packedSeedbedReceipt = (plan) => ({
+    operationId: plan.id,
+    state: "ready",
+    version: "0.4.0",
+    digest: plan.digest,
+    endpoint: plan.request.endpoint,
+    installationId: plan.request.installationId,
+    baseIri: plan.request.baseIri,
+    expected: plan.request.expected,
+    protectedTokenFile: {
+      kind: "protected-file",
+      canonicalPath: tokenPath,
+      credentialId: "packed-credential",
+      sha256: alembic.sha256(token)
+    },
+    environmentSelector: "GNOLITH_BEARER_TOKEN"
+  });
+  let seedbedResumeCalls = 0;
   const seedbed = {
     inspect: (selector) => exactSeedbed.inspect(selector),
     plan: (request) => exactSeedbed.plan(request),
-    apply: async (plan) => ({
-      operationId: plan.id,
-      state: "ready",
-      version: "0.4.0",
-      digest: plan.digest,
-      endpoint: plan.request.endpoint,
-      installationId: plan.request.installationId,
-      baseIri: plan.request.baseIri,
-      expected: plan.request.expected,
-      protectedTokenFile: {
-        kind: "protected-file",
-        canonicalPath: tokenPath,
-        credentialId: "packed-credential",
-        sha256: alembic.sha256(token)
-      },
-      environmentSelector: "GNOLITH_BEARER_TOKEN"
-    }),
-    resume: (operationId) => exactSeedbed.resume(operationId),
-    diagnose: (selector) => exactSeedbed.diagnose(selector)
+    apply: async (approvedPlan) => packedSeedbedReceipt(approvedPlan),
+    resume: async (operationId) => {
+      assert.equal(operationId, seedbedPlan.id);
+      seedbedResumeCalls += 1;
+      return packedSeedbedReceipt(seedbedPlan);
+    },
+    diagnose: async (selector) => ({
+      installationId: selector.installationId,
+      classification: "local-workshop-unavailable",
+      repair: {
+        kind: "seedbed-resume-operation-v1",
+        operationId: seedbedPlan.id,
+        action: "restart-recorded-compose"
+      }
+    })
   };
   const plan = await alembic.createPlan({
     taskDirectory: projectRoot,
@@ -196,6 +210,39 @@ try {
   };
   const receipt = await alembic.applyPlan(plan, { seedbed, workshopTransport });
   assert.equal(receipt.state, "activation-required");
+  assert.equal(fetchCalls, 0);
+  const stoppedTransport = {
+    async call() {
+      throw new Error("ECONNREFUSED packed-secret-path");
+    }
+  };
+  await assert.rejects(
+    alembic.resumeOperation(projectRoot, plan.operationId, {
+      seedbed,
+      workshopTransport: stoppedTransport
+    }),
+    (error) => {
+      assert.equal(error.code, "workshop-stopped");
+      assert.doesNotMatch(error.message, /ECONNREFUSED|packed-secret-path/u);
+      return true;
+    }
+  );
+  assert.equal(seedbedResumeCalls, 1);
+  const stoppedDiagnosis = await new alembic.AlembicControlPlane({ seedbed }).diagnose({
+    taskDirectory: projectRoot,
+    confirmedProjectRoot: projectRoot,
+    operationId: plan.operationId,
+    installationId: expected.installationId
+  });
+  assert.equal(stoppedDiagnosis.classification, "workshop-stopped");
+  assert.equal(stoppedDiagnosis.repair, "resume-exact-operation");
+  const repaired = await alembic.resumeOperation(projectRoot, plan.operationId, {
+    seedbed,
+    workshopTransport
+  });
+  assert.equal(repaired.state, "activation-required");
+  assert.equal(repaired.failureClassification, "none");
+  assert.equal(seedbedResumeCalls, 2);
   assert.equal(fetchCalls, 0);
 
   await assert.rejects(

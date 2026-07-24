@@ -3,7 +3,7 @@
   "$id": "https://gnolith.dev/schemas/alembic/plan-v1.json",
   "type": "object",
   "additionalProperties": false,
-  "required": ["format", "planId", "operationId", "createdAt", "expiresAt", "requestDigest", "project", "action", "mode", "endpoint", "authentication", "expected", "seedbedPlan", "seedbedPlanDigest", "seedbedLocalBuildTrust", "seedbedStateRoot", "compatibility", "approvedSteps", "digest"],
+  "required": ["format", "planId", "operationId", "createdAt", "expiresAt", "requestDigest", "project", "action", "mode", "endpoint", "authentication", "expected", "seedbedPlan", "seedbedPlanDigest", "seedbedLocalBuildTrust", "semanticProfile", "seedbedStateRoot", "compatibility", "approvedSteps", "digest"],
   "properties": {
     "format": { "const": "gnolith-alembic-plan-v1" },
     "planId": { "type": "string", "pattern": "^plan_[0-9a-f-]{36}$" },
@@ -40,6 +40,31 @@
                 "graphSha256": { "$ref": "#/$defs/digest" },
                 "composeBundleSha256": { "$ref": "#/$defs/digest" }
               }
+            }
+          }
+        },
+        { "type": "null" }
+      ]
+    },
+    "semanticProfile": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["format", "revision", "fingerprint", "providerKind", "vectorKind", "providerEndpoint", "vectorEndpoint", "credentialSelectorIds"],
+          "properties": {
+            "format": { "const": "gnolith-alembic-semantic-profile-v1" },
+            "revision": { "type": "integer", "minimum": 1 },
+            "fingerprint": { "$ref": "#/$defs/digest" },
+            "providerKind": { "enum": ["openai-compatible", "ollama-compatible"] },
+            "vectorKind": { "enum": ["sqlite", "qdrant"] },
+            "providerEndpoint": { "type": "string" },
+            "vectorEndpoint": { "type": ["string", "null"] },
+            "credentialSelectorIds": {
+              "type": "array",
+              "items": { "type": "string" },
+              "uniqueItems": true,
+              "maxItems": 16
             }
           }
         },

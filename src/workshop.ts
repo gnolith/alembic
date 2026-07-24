@@ -13,6 +13,7 @@ import {
   type Mode,
   type OAuthHost,
   type ProtectedFileSelector,
+  type SemanticPlanProfileV1,
   type WorkshopStatusOutput,
   type WorkshopVerification
 } from "./types.js";
@@ -117,7 +118,11 @@ async function localToken(selector: ProtectedFileSelector): Promise<string> {
   return token;
 }
 
-function compareStatus(observed: WorkshopStatusOutput, expected: ExpectedWorkshopStatus): void {
+function compareStatus(
+  observed: WorkshopStatusOutput,
+  expected: ExpectedWorkshopStatus,
+  semanticProfile?: SemanticPlanProfileV1
+): void {
   const exact = [
     "installationId", "baseIri", "principalId", "credentialId", "activeWorkspaceId",
     "capabilities", "authorizationRevision", "migrationReadiness",
@@ -132,7 +137,8 @@ function compareStatus(observed: WorkshopStatusOutput, expected: ExpectedWorksho
   invariant(
     exactKeys(observed.migrationReadiness, ["namespace", "version", "ready"]) &&
       exactKeys(observed.compatibility, ["diamond", "taproot"]) &&
-      exactKeys(observed.semanticState, ["state", "configured"]) &&
+      (exactKeys(observed.semanticState, ["state", "configured"]) ||
+        exactKeys(observed.semanticState, ["state", "configured", "revision", "fingerprint", "ready"])) &&
       exactKeys(observed.producers, ["ready", "fingerprint", "kinds"]) &&
       exactKeys(observed.versions, ["server", "operationSchema"]) &&
       [observed.installationId, observed.baseIri, observed.principalId, observed.credentialId,
@@ -183,6 +189,18 @@ function compareStatus(observed: WorkshopStatusOutput, expected: ExpectedWorksho
     "semantic-not-ready",
     "Semantic degradation was not explicitly accepted"
   );
+  if (semanticProfile !== undefined) {
+    invariant(
+      exactKeys(observed.semanticState, ["state", "configured", "revision", "fingerprint", "ready"]) &&
+        observed.semanticState.revision === semanticProfile.revision &&
+        observed.semanticState.fingerprint === semanticProfile.fingerprint &&
+        observed.semanticState.state ===
+          (expected.semanticState === "absent" ? "unconfigured" : expected.semanticState) &&
+        observed.semanticState.ready === (observed.semanticState.state === "ready"),
+      "semantic-status-mismatch",
+      "Workshop semantic fingerprint, revision, or state differs from the approved profile"
+    );
+  }
 }
 
 function uniqueStrings(values: readonly string[]): boolean {
@@ -201,6 +219,7 @@ export async function verifyWorkshop(input: {
   mode: Mode;
   authentication: EnvironmentSelector | HostOAuthSelector;
   expected: ExpectedWorkshopStatus;
+  semanticProfile?: SemanticPlanProfileV1;
   protectedFile?: ProtectedFileSelector;
   oauthHost?: OAuthHost;
   transport?: WorkshopTransport;
@@ -264,7 +283,7 @@ export async function verifyWorkshop(input: {
   );
   const statusResult = statusResponse.response.result as { structuredContent?: WorkshopStatusOutput };
   invariant(statusResult.structuredContent !== undefined, "invalid-status", "gnolith_status lacks structured content");
-  compareStatus(statusResult.structuredContent, input.expected);
+  compareStatus(statusResult.structuredContent, input.expected, input.semanticProfile);
   const digest = sha256(canonicalJson({ identity: WORKSHOP_IDENTITY, tools, status: statusResult.structuredContent }));
   token = "";
   return {

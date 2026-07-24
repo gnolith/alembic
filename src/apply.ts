@@ -39,6 +39,7 @@ function initialReceipt(plan: AlembicPlan): AlembicReceipt {
     seedbed: null,
     verificationDigest: null,
     previousReceipt: null,
+    failureClassification: "none",
     message: "Apply started"
   };
 }
@@ -71,6 +72,16 @@ export async function applyPlan(
   if (resume) {
     receipt = await store.readReceipt(plan.operationId);
     invariant(receipt.planDigest === plan.digest, "resume-plan-mismatch", "Operation is bound to another plan");
+    const completedLocalRepair =
+      plan.mode === "docker-local" &&
+      plan.action !== "remove" &&
+      receipt.configAfterDigest !== null &&
+      (receipt.state === "activation-required" ||
+        receipt.failureClassification === "workshop-stopped" ||
+        receipt.failureClassification === "repair-failed");
+    if (completedLocalRepair) {
+      return repairCompletedLocalPlan(plan, receipt, store, dependencies);
+    }
     if (receipt.state === "activation-required") return receipt;
   } else {
     try {
@@ -145,6 +156,7 @@ export async function applyPlan(
         "seedbed-credential-selector",
         "Seedbed protected credential selector is invalid"
       );
+      validateSeedbedSemanticReceipt(plan, seedbedReceipt);
       receipt = {
         ...receipt,
         seedbed: {
@@ -163,6 +175,7 @@ export async function applyPlan(
         mode: plan.mode,
         authentication: plan.authentication,
         expected: plan.expected,
+        ...(plan.semanticProfile ? { semanticProfile: plan.semanticProfile } : {}),
         ...(seedbedReceipt ? { protectedFile: seedbedReceipt.protectedTokenFile } : {}),
         ...(dependencies.oauthHost ? { oauthHost: dependencies.oauthHost } : {}),
         ...(dependencies.workshopTransport ? { transport: dependencies.workshopTransport } : {})
@@ -206,6 +219,7 @@ export async function applyPlan(
     receipt = {
       ...receipt,
       state: "activation-required",
+      failureClassification: "none",
       updatedAt: new Date().toISOString(),
       message:
         "Start one new Codex task in this same project. Codex will load .codex/config.toml and connect directly to Gnolith."
@@ -217,6 +231,7 @@ export async function applyPlan(
     const failed: AlembicReceipt = {
       ...receipt,
       state: prerequisite ? "activation-prerequisite" : "failed",
+      failureClassification: "none",
       updatedAt: new Date().toISOString(),
       message:
         error instanceof AlembicError
@@ -226,6 +241,139 @@ export async function applyPlan(
     await store.writeReceipt(failed);
     throw error;
   }
+}
+
+async function repairCompletedLocalPlan(
+  plan: AlembicPlan,
+  existing: AlembicReceipt,
+  store: OperationStore,
+  dependencies: ApplyDependencies
+): Promise<AlembicReceipt> {
+  invariant(dependencies.seedbed !== undefined && plan.seedbedPlan !== null && existing.seedbed !== null,
+    "seedbed-repair-binding-missing", "Recorded Seedbed repair binding is absent");
+  invariant(
+    existing.seedbed.operationId === plan.seedbedPlan.id &&
+      existing.seedbed.digest === plan.seedbedPlan.digest,
+    "seedbed-repair-binding-mismatch",
+    "Recorded Seedbed repair binding differs from the approved plan"
+  );
+  invariant(
+    await currentConfigDigest(plan.project.configPath) === existing.configAfterDigest,
+    "config-changed",
+    "Managed config changed after the completed operation"
+  );
+  let receipt = await checkpoint(store, existing, "seedbed-repair", "before");
+  let seedbedReceipt;
+  try {
+    seedbedReceipt = await dependencies.seedbed.resume(existing.seedbed.operationId);
+    validateSeedbedReceipt(plan, seedbedReceipt);
+  } catch {
+    const failed: AlembicReceipt = {
+      ...receipt,
+      state: "failed",
+      updatedAt: new Date().toISOString(),
+      failureClassification: "repair-failed",
+      message: "Recorded Seedbed repair failed; diagnose and resume this exact operation"
+    };
+    await store.writeReceipt(failed);
+    throw new AlembicError("seedbed-repair-failed", failed.message);
+  }
+  receipt = await checkpoint(store, receipt, "seedbed-repair", "after");
+  receipt = await checkpoint(store, receipt, "workshop-repair-verification", "before");
+  try {
+    const verification = await verifyWorkshop({
+      endpoint: plan.endpoint,
+      mode: plan.mode,
+      authentication: plan.authentication,
+      expected: plan.expected,
+      ...(plan.semanticProfile ? { semanticProfile: plan.semanticProfile } : {}),
+      protectedFile: seedbedReceipt.protectedTokenFile,
+      ...(dependencies.workshopTransport ? { transport: dependencies.workshopTransport } : {})
+    });
+    receipt = { ...receipt, verificationDigest: verification.digest };
+  } catch {
+    const failed: AlembicReceipt = {
+      ...receipt,
+      state: "failed",
+      updatedAt: new Date().toISOString(),
+      failureClassification: "workshop-stopped",
+      message: "Workshop remained unavailable or unready after recorded Seedbed repair"
+    };
+    await store.writeReceipt(failed);
+    throw new AlembicError("workshop-stopped", failed.message);
+  }
+  receipt = await checkpoint(store, receipt, "workshop-repair-verification", "after");
+  const ready: AlembicReceipt = {
+    ...receipt,
+    state: "activation-required",
+    updatedAt: new Date().toISOString(),
+    failureClassification: "none",
+    message:
+      "Recorded Seedbed operation resumed and Workshop was freshly verified. Start one new Codex task in this same project."
+  };
+  await store.writeReceipt(ready);
+  return ready;
+}
+
+function validateSeedbedReceipt(
+  plan: AlembicPlan,
+  seedbedReceipt: Awaited<ReturnType<SeedbedControl["resume"]>>
+): void {
+  invariant(seedbedReceipt.state === "ready", "seedbed-incomplete", "Seedbed did not produce a ready receipt");
+  invariant(seedbedReceipt.version === "0.4.0", "seedbed-version-changed", "Seedbed receipt version changed");
+  invariant(plan.seedbedPlan !== null, "seedbed-plan-missing", "Approved Seedbed plan is absent");
+  invariant(
+    seedbedReceipt.digest === plan.seedbedPlan.digest &&
+      seedbedReceipt.operationId === plan.seedbedPlan.id,
+    "seedbed-plan-binding-changed",
+    "Seedbed receipt is not bound to the approved control plan"
+  );
+  invariant(seedbedReceipt.endpoint === plan.endpoint, "seedbed-endpoint-changed", "Seedbed receipt endpoint changed");
+  invariant(seedbedReceipt.installationId === plan.expected.installationId, "seedbed-identity-changed", "Seedbed identity changed");
+  invariant(seedbedReceipt.baseIri === plan.expected.baseIri, "seedbed-base-iri-changed", "Seedbed base IRI changed");
+  invariant(
+    canonicalJson(seedbedReceipt.expected) === canonicalJson(plan.expected),
+    "seedbed-readiness-changed",
+    "Seedbed expected Workshop evidence changed"
+  );
+  invariant(
+    seedbedReceipt.environmentSelector === "GNOLITH_BEARER_TOKEN",
+    "seedbed-environment-selector",
+    "Seedbed credential environment selector is incompatible"
+  );
+  invariant(
+    seedbedReceipt.protectedTokenFile.credentialId.length > 0 &&
+      /^[0-9a-f]{64}$/u.test(seedbedReceipt.protectedTokenFile.sha256),
+    "seedbed-credential-selector",
+    "Seedbed protected credential selector is invalid"
+  );
+  validateSeedbedSemanticReceipt(plan, seedbedReceipt);
+}
+
+function validateSeedbedSemanticReceipt(
+  plan: AlembicPlan,
+  seedbedReceipt: Awaited<ReturnType<SeedbedControl["resume"]>>
+): void {
+  if (plan.semanticProfile === null) {
+    invariant(
+      seedbedReceipt.semantic === undefined || seedbedReceipt.semantic === null,
+      "seedbed-semantic-unexpected",
+      "Seedbed returned semantic evidence for an unconfigured plan"
+    );
+    return;
+  }
+  invariant(
+    seedbedReceipt.semantic !== undefined &&
+      seedbedReceipt.semantic !== null &&
+      canonicalJson(Object.keys(seedbedReceipt.semantic).sort()) ===
+        canonicalJson(["fingerprint", "revision", "state"]) &&
+      seedbedReceipt.semantic.fingerprint === plan.semanticProfile.fingerprint &&
+      seedbedReceipt.semantic.revision === plan.semanticProfile.revision &&
+      seedbedReceipt.semantic.state ===
+        (plan.expected.semanticState === "absent" ? "unconfigured" : plan.expected.semanticState),
+    "seedbed-semantic-mismatch",
+    "Seedbed semantic receipt differs from the approved profile"
+  );
 }
 
 export async function resumeOperation(
