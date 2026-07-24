@@ -53,7 +53,7 @@ try {
   assert.equal(workshopContract.OPERATION_SCHEMA_VERSION, 2);
   assert.equal(
     workshopContract.CATALOG_DIGEST,
-    "e2d1e0f09e4dbad786d14cb4a9dd86dbe56a64d274e252bbbb1956b2c8933c85"
+    "af455b4d6ab3560bca9c0ab48e9db7bd3cbcfa166ace875578d88d182069071f"
   );
   assert.deepEqual(
     workshopContract.operationCatalog.map(({ name }) => name),
@@ -95,7 +95,7 @@ try {
     baseIri: "https://example.test/packed/",
     serverVersion: "0.5.0",
     operationVersion: "2",
-    catalogDigest: "e2d1e0f09e4dbad786d14cb4a9dd86dbe56a64d274e252bbbb1956b2c8933c85",
+    catalogDigest: "af455b4d6ab3560bca9c0ab48e9db7bd3cbcfa166ace875578d88d182069071f",
     migrationReady: true,
     canonicalReady: true,
     authorizationReady: true,
@@ -131,9 +131,9 @@ try {
       kind: "seedbed-local-build-v1",
       selector: "gnolith-seedbed-local-build-v1",
       pullPolicy: "never",
-      componentLockSha256: "4bf9259d44495372f70420f5e235b3e12319c5f8be2a8cfff5961a9c89331bfc",
-      graphSha256: "9cffdfffa8eb8ae1e961b0b88571c9e6476a7427dcdbd018698e793297ba5be1",
-      composeBundleSha256: "f25e9e651de83e94ed6d1d5a25bc2446209951400a8190f50726f2c555f4fdb9"
+      componentLockSha256: "cf65ee42f61bede0bcb6b444444eb71ae6dfd20762b45ffdc1ab4b94e9555dbe",
+      graphSha256: "adddbbf4f1341e75dbf7a6b823bf7e490f63e8818f2a9ce51d4c8409b38ad4e3",
+      composeBundleSha256: "a5d2a649e9191089428520e1c82da507814b0224c6b101e593b76085db589fc4"
     },
     semantic: {
       configuration: semanticConfiguration,
@@ -232,7 +232,7 @@ try {
       baseIri: "https://example.test/packed"
     }
   });
-  assert.equal(plan.seedbedLocalBuildTrust.seedbedCandidateSha256, "5faf7a2a7957f04e22b4137ca806b2cbf879c07842a7d5dee211e60a1790deda");
+  assert.equal(plan.seedbedLocalBuildTrust.seedbedCandidateSha256, "db9b8390860d0d52f3055733b8f355190196dbc48d0325e9da93d761027072bc");
   assert.equal(plan.semanticProfile.fingerprint, semanticFingerprint);
   assert.equal(plan.semanticProfile.revision, 1);
   assert.equal(plan.semanticProfile.providerEndpoint, "http://host.docker.internal:43118/mock/embeddings");
@@ -256,7 +256,8 @@ try {
       configured: true,
       revision: 1,
       fingerprint: semanticFingerprint,
-      ready: true
+      ready: true,
+      diagnostic: null
     },
     producers: { ready: true, fingerprint: "packed", kinds: ["task", "memory", "prompt"] },
     blobReady: true,
@@ -318,6 +319,104 @@ try {
     semanticProfile: plan.semanticProfile,
     protectedFile: packedSeedbedReceipt(approvedSeedbedPlan).protectedTokenFile
   };
+  for (const diagnostic of [
+    {
+      format: "gnolith-workshop-semantic-diagnostic-v1",
+      version: 1,
+      code: "materialization-pending",
+      retryable: true,
+      backend: "sqlite",
+      repair: "retry"
+    },
+    {
+      format: "gnolith-workshop-semantic-diagnostic-v1",
+      version: 1,
+      code: "provider-unavailable",
+      retryable: true,
+      backend: "qdrant",
+      repair: "retry"
+    }
+  ]) {
+    const degraded = await alembic.verifyWorkshop({
+      ...verificationInput,
+      expected: { ...expected, semanticState: "degraded", allowLexicalOnly: true },
+      semanticProfile: undefined,
+      transport: workshopTransportFor({
+        ...workshopStatus,
+        semanticState: {
+          ...workshopStatus.semanticState,
+          state: "degraded",
+          ready: false,
+          diagnostic
+        }
+      })
+    });
+    assert.deepEqual(degraded.status.semanticState.diagnostic, diagnostic);
+  }
+  for (const status of [
+    {
+      ...workshopStatus,
+      semanticState: {
+        ...workshopStatus.semanticState,
+        state: "degraded",
+        ready: false,
+        diagnostic: {
+          format: "gnolith-workshop-semantic-diagnostic-v1",
+          version: 1,
+          code: "provider-unavailable",
+          retryable: true,
+          backend: "sqlite",
+          repair: "retry",
+          secret: "PACKED_STATUS_SECRET_CANARY"
+        }
+      }
+    },
+    {
+      ...workshopStatus,
+      semanticState: {
+        ...workshopStatus.semanticState,
+        state: "degraded",
+        ready: false,
+        diagnostic: {
+          format: "gnolith-workshop-semantic-diagnostic-v1",
+          version: 1,
+          code: "provider-unavailable",
+          retryable: true,
+          backend: "qdrant",
+          repair: "retry",
+          cause: { cause: { path: "C:\\protected\\credential" } }
+        }
+      }
+    },
+    {
+      ...workshopStatus,
+      semanticState: {
+        ...workshopStatus.semanticState,
+        state: "degraded",
+        ready: false,
+        diagnostic: {
+          format: "gnolith-workshop-semantic-diagnostic-v1",
+          version: 1,
+          code: "future-unbounded-code",
+          retryable: true,
+          backend: "sqlite",
+          repair: "retry"
+        }
+      }
+    },
+    {
+      ...workshopStatus,
+      capabilities: Array.from({ length: 257 }, (_, index) => `capability:${index}`)
+    }
+  ]) {
+    await assert.rejects(
+      alembic.verifyWorkshop({
+        ...verificationInput,
+        transport: workshopTransportFor(status)
+      }),
+      /pinned Workshop schema/u
+    );
+  }
   for (const semanticState of [
     { ...workshopStatus.semanticState, fingerprint: "0".repeat(64) },
     { ...workshopStatus.semanticState, revision: 2 },
@@ -328,7 +427,7 @@ try {
         ...verificationInput,
         transport: workshopTransportFor({ ...workshopStatus, semanticState })
       }),
-      /semantic|status mismatch/u
+      /semantic|status mismatch|pinned Workshop schema/u
     );
   }
   assert.equal(fetchCalls, 0);

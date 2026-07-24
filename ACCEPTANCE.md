@@ -35,3 +35,4 @@
 | ALE-AR-031 | Default local Seedbed plan and receipt bind equal Waystone `/app` manifest, CSS entrypoint, and reserved-route evidence without giving Alembic UI ownership. |
 | ALE-AR-032 | Protected bearer files normalize at most one terminal LF and reject ambiguous whitespace, controls, malformed UTF-8, and non-base64url text without leaking values or paths. |
 | ALE-AR-033 | Packed stdio planning accepts the public Workshop operation schema 2 with only the `GNOLITH_BEARER_TOKEN` selector present, projects migration schema 11 solely into SeedbedControl, canonicalizes slash/no-slash identities, and returns bounded safe nested Seedbed rejection evidence with the original JSON-RPC ID. |
+| ALE-AR-034 | Workshop semantic status evidence is exact-key, version-pinned, bounded, and secret-free; ready/unconfigured and degraded diagnostics survive apply/resume/repair while unknown, nested, oversized, path-bearing, or secret-bearing evidence fails before config mutation. |

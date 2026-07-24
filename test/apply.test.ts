@@ -25,7 +25,8 @@ import {
 } from "./helpers.js";
 import type {
   InstallationSelector,
-  SeedbedCallOptions
+  SeedbedCallOptions,
+  WorkshopStatusOutput
 } from "../src/types.js";
 
 test("Docker-local apply invokes Seedbed, verifies protocol, writes config last, and requires new task", async () => {
@@ -718,7 +719,8 @@ test("semantic planning binds a redacted profile and only approved Compose-priva
         configured: true,
         revision: 3,
         fingerprint: semanticFingerprint(configuration),
-        ready: true
+        ready: true,
+        diagnostic: null
       }
     })
   });
@@ -728,7 +730,8 @@ test("semantic planning binds a redacted profile and only approved Compose-priva
     configured: true,
     revision: 3,
     fingerprint: semanticFingerprint(configuration),
-    ready: true
+    ready: true,
+    diagnostic: null
   });
 
   const badPrivate = {
@@ -867,7 +870,15 @@ test("semantic planning binds a redacted profile and only approved Compose-priva
         configured: true,
         revision: 1,
         fingerprint: ollamaProfile.fingerprint,
-        ready: false
+        ready: false,
+        diagnostic: {
+          format: "gnolith-workshop-semantic-diagnostic-v1",
+          version: 1,
+          code: "provider-unavailable",
+          retryable: true,
+          backend: "sqlite",
+          repair: "retry"
+        }
       }
     })
   });
@@ -893,7 +904,8 @@ test("semantic planning binds a redacted profile and only approved Compose-priva
           configured: true,
           revision: 1,
           fingerprint: ollamaProfile.fingerprint,
-          ready: true
+          ready: true,
+          diagnostic: null
         }
       })
     }),
@@ -996,7 +1008,8 @@ test("protected loopback OpenAI-compatible SQLite profile is accepted, redacted,
         configured: true,
         revision: 5,
         fingerprint: canonicalFingerprint,
-        ready: true
+        ready: true,
+        diagnostic: null
       }
     })
   });
@@ -1005,7 +1018,8 @@ test("protected loopback OpenAI-compatible SQLite profile is accepted, redacted,
     configured: true,
     revision: 5,
     fingerprint: canonicalFingerprint,
-    ready: true
+    ready: true,
+    diagnostic: null
   });
 
   const localhostPlan = await createPlan({
@@ -1229,8 +1243,143 @@ test("wrong identity, shallow catalog, and degraded semantics cannot verify", as
         configured: true,
         revision: 1,
         fingerprint: "a".repeat(64),
-        ready: false
+        ready: false,
+        diagnostic: {
+          format: "gnolith-workshop-semantic-diagnostic-v1",
+          version: 1,
+          code: "provider-unavailable",
+          retryable: true,
+          backend: "sqlite",
+          repair: "retry"
+        }
       }
     })
   }), /Semantic degradation/u);
+});
+
+test("version-2 Workshop semantic diagnostics are exact, bounded, and secret-free", async () => {
+  const root = await temporaryProject();
+  const protectedCredential = await protectedToken(root);
+  process.env.GNOLITH_BEARER_TOKEN = protectedCredential.token;
+  const common = {
+    endpoint: "http://127.0.0.1/mcp",
+    mode: "docker-local" as const,
+    authentication: { kind: "environment" as const, variable: "GNOLITH_BEARER_TOKEN" as const },
+    expected: { ...expectedStatus, semanticState: "degraded" as const, allowLexicalOnly: true },
+    protectedFile: {
+      kind: "protected-file" as const,
+      canonicalPath: protectedCredential.path,
+      credentialId: "test",
+      sha256: protectedCredential.digest
+    }
+  };
+  const { verifyWorkshop } = await import("../src/workshop.js");
+  const liveFailureStatus: WorkshopStatusOutput = {
+    ...workshopStatus,
+    semanticState: {
+      state: "degraded",
+      configured: true,
+      revision: 1,
+      fingerprint: "a".repeat(64),
+      ready: false,
+      diagnostic: {
+        format: "gnolith-workshop-semantic-diagnostic-v1",
+        version: 1,
+        code: "materialization-pending",
+        retryable: true,
+        backend: "sqlite",
+        repair: "retry"
+      }
+    }
+  };
+  const accepted = await verifyWorkshop({
+    ...common,
+    transport: new MockWorkshop(liveFailureStatus)
+  });
+  assert.deepEqual(accepted.status.semanticState.diagnostic, {
+    format: "gnolith-workshop-semantic-diagnostic-v1",
+    version: 1,
+    code: "materialization-pending",
+    retryable: true,
+    backend: "sqlite",
+    repair: "retry"
+  });
+
+  const adversarial = [
+    {
+      ...liveFailureStatus,
+      semanticState: {
+        ...liveFailureStatus.semanticState,
+        diagnostic: {
+          format: "gnolith-workshop-semantic-diagnostic-v1",
+          version: 1,
+          code: "provider-unavailable",
+          retryable: true,
+          backend: "qdrant",
+          repair: "retry",
+          message: "Bearer SECRET_CANARY must not cross the status boundary"
+        }
+      }
+    },
+    {
+      ...liveFailureStatus,
+      semanticState: {
+        ...liveFailureStatus.semanticState,
+        diagnostic: {
+          format: "gnolith-workshop-semantic-diagnostic-v1",
+          version: 1,
+          code: "unknown-provider-code",
+          retryable: true,
+          backend: "sqlite",
+          repair: "retry"
+        }
+      }
+    },
+    {
+      ...liveFailureStatus,
+      semanticState: {
+        ...liveFailureStatus.semanticState,
+        diagnostic: {
+          format: "gnolith-workshop-semantic-diagnostic-v1",
+          version: 1,
+          code: "provider-unavailable",
+          retryable: true,
+          backend: "sqlite",
+          repair: "retry",
+          cause: { cause: { cause: { path: "C:\\secret\\token" } } }
+        }
+      }
+    },
+    {
+      ...liveFailureStatus,
+      semanticState: {
+        ...liveFailureStatus.semanticState,
+        diagnostic: {
+          format: "gnolith-workshop-semantic-diagnostic-v1",
+          version: 2,
+          code: "provider-unavailable",
+          retryable: "yes",
+          backend: "https://vector.invalid/secret",
+          repair: "restart"
+        }
+      }
+    },
+    {
+      ...liveFailureStatus,
+      capabilities: Array.from({ length: 257 }, (_, index) => `capability:${index}`)
+    },
+    {
+      ...liveFailureStatus,
+      producers: { ...liveFailureStatus.producers, fingerprint: `unsafe\u0000status` }
+    }
+  ];
+  for (const status of adversarial) {
+    await assert.rejects(
+      verifyWorkshop({
+        ...common,
+        transport: new MockWorkshop(status as unknown as WorkshopStatusOutput)
+      }),
+      /pinned Workshop schema/u
+    );
+  }
 });
