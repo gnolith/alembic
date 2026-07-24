@@ -103,8 +103,8 @@ test("runtime Workshop verification exactly matches the final public candidate l
       containerWorkdir: string;
     };
   };
-  assert.equal(lock.workshop.commit, "13db3690053bea331d341f6f848d2641441ecc0c");
-  assert.equal(lock.workshop.sha256, "1a59399eb253b7085d581726f3e9314ecbe5c52f4780fb14e43df1af8df484b3");
+  assert.equal(lock.workshop.commit, "299961c51f4aacdabd423ad77762c6359f5a2854");
+  assert.equal(lock.workshop.sha256, "207c7ff4a84a9a4188c1d471ff892c4c32e0a2589c687c4e4a45e4426d5f7ebd");
   assert.equal(lock.workshop.migrationSchema, WORKSHOP_MIGRATION_SCHEMA_VERSION);
   assert.equal(lock.workshop.operationSchema, WORKSHOP_OPERATION_SCHEMA_VERSION);
   assert.equal(lock.workshop.catalogSize, WORKSHOP_TOOL_NAMES.length);

@@ -53,7 +53,7 @@ try {
   assert.equal(workshopContract.OPERATION_SCHEMA_VERSION, 2);
   assert.equal(
     workshopContract.CATALOG_DIGEST,
-    "7a66ccb7ed6c5ae33be526a318376b895d2ecb122d7e723fb3117baf8ad66224"
+    "e2d1e0f09e4dbad786d14cb4a9dd86dbe56a64d274e252bbbb1956b2c8933c85"
   );
   assert.deepEqual(
     workshopContract.operationCatalog.map(({ name }) => name),
@@ -95,7 +95,7 @@ try {
     baseIri: "https://example.test/packed/",
     serverVersion: "0.5.0",
     operationVersion: "2",
-    catalogDigest: "7a66ccb7ed6c5ae33be526a318376b895d2ecb122d7e723fb3117baf8ad66224",
+    catalogDigest: "e2d1e0f09e4dbad786d14cb4a9dd86dbe56a64d274e252bbbb1956b2c8933c85",
     migrationReady: true,
     canonicalReady: true,
     authorizationReady: true,
@@ -131,9 +131,9 @@ try {
       kind: "seedbed-local-build-v1",
       selector: "gnolith-seedbed-local-build-v1",
       pullPolicy: "never",
-      componentLockSha256: "3a4af57aae27206b90c7f2f7db9cd72607b982aca5a9c5f44d7604ee7a00bc20",
-      graphSha256: "14011e9d051e6c310fdb47d4c65cd1dc8597b9906f802070cbdf4df849e5ce58",
-      composeBundleSha256: "7c3e0e3b7ca9d1ba7170c526092e3cd928560248396e37fa64daa5998e57fdc2"
+      componentLockSha256: "4bf9259d44495372f70420f5e235b3e12319c5f8be2a8cfff5961a9c89331bfc",
+      graphSha256: "9cffdfffa8eb8ae1e961b0b88571c9e6476a7427dcdbd018698e793297ba5be1",
+      composeBundleSha256: "f25e9e651de83e94ed6d1d5a25bc2446209951400a8190f50726f2c555f4fdb9"
     },
     semantic: {
       configuration: semanticConfiguration,
@@ -232,7 +232,7 @@ try {
       baseIri: "https://example.test/packed"
     }
   });
-  assert.equal(plan.seedbedLocalBuildTrust.seedbedCandidateSha256, "def6a1900a4e8452dd0fcdee9125d5c0bca6fafeaf3599e3c5cd66047a1db93a");
+  assert.equal(plan.seedbedLocalBuildTrust.seedbedCandidateSha256, "5faf7a2a7957f04e22b4137ca806b2cbf879c07842a7d5dee211e60a1790deda");
   assert.equal(plan.semanticProfile.fingerprint, semanticFingerprint);
   assert.equal(plan.semanticProfile.revision, 1);
   assert.equal(plan.semanticProfile.providerEndpoint, "http://host.docker.internal:43118/mock");
