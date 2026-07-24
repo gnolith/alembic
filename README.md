@@ -9,6 +9,13 @@ operation read, operation resume, diagnose, legacy inspect, and legacy adopt.
 Docker-local provisioning is delegated to Seedbed's stable typed contract.
 Remote services are connect-existing only.
 
+The supported npm package is self-contained for Docker-local control: it has
+one bundled `@gnolith/seedbed@0.4.0` runtime dependency whose component lock
+must match `candidate-lock.json`. Installing Alembic therefore installs the
+usable `@gnolith/seedbed/local-control` module without a separate registry or
+co-install step. Alembic loads that module lazily, so connect-existing remote
+inspection, planning, and verification do not initialize Seedbed or Docker.
+
 ## Safety model
 
 - Plans bind the canonical project, config digest, endpoint, auth selector,
@@ -67,7 +74,10 @@ npm run candidate
 `candidate` verifies the exact Seedbed package/component-lock/graph/Compose
 bundle and Workshop package, runs packed semantic plan/apply/repair,
 Workshop-52/no-pull, and nine-tool Alembic integration, then drives the actual
-packed stdio MCP through bounded plan and valid/invalid legacy requests. It
+packed stdio MCP through bounded plan and valid/invalid legacy requests. A
+fresh offline install of that archive must contain exactly one
+`@gnolith/seedbed@0.4.0`, import its `local-control` export, construct all five
+bounded control methods, and start Alembic's remote-capable nine-tool MCP. It
 finally creates an unpublished package archive, CycloneDX SBOM, inventory, and
 lowercase SHA-256
 checksums. It never tags, releases, or publishes.

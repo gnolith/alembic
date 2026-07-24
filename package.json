@@ -5,6 +5,10 @@
   "license": "MIT",
   "type": "module",
   "private": false,
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
   "engines": {
     "node": ">=22.0.0"
   },
@@ -43,6 +47,12 @@
     "gate": "npm run clean && npm ci && npm run lint && npm test && npm run test:security && npm run test:plugin && npm run build && npm audit --omit=dev --audit-level=high && npm pack --dry-run",
     "candidate": "node scripts/candidate.mjs"
   },
+  "dependencies": {
+    "@gnolith/seedbed": "0.4.0"
+  },
+  "bundleDependencies": [
+    "@gnolith/seedbed"
+  ],
   "devDependencies": {
     "@eslint/js": "9.39.2",
     "@types/node": "24.10.4",
@@ -51,13 +61,9 @@
     "typescript-eslint": "8.51.0"
   },
   "peerDependencies": {
-    "@gnolith/seedbed": "0.4.0",
     "@gnolith/workshop": "0.5.0"
   },
   "peerDependenciesMeta": {
-    "@gnolith/seedbed": {
-      "optional": true
-    },
     "@gnolith/workshop": {
       "optional": true
     }

@@ -6,6 +6,7 @@
 - Preserve safe nested SeedbedControl rejection code and phase evidence across the isolated packed MCP worker boundary.
 - Prove final Docker-local planning from an empty project with an absent bearer value and both default and explicit empty Seedbed state roots.
 - Accept the pinned Workshop semantic diagnostic evidence while strictly rejecting unknown, malformed, nested, oversized, or sensitive status payloads.
+- Bundle the exact Seedbed local-control runtime, prove a fresh offline install, and add SHA-pinned trusted-publisher provenance automation.
 
 ## 0.1.0 - Unreleased
 
