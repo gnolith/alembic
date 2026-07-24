@@ -111,12 +111,12 @@ try {
     name: "Packed Semantic",
     provider: {
       kind: "openai-compatible",
-      endpoint: "https://api.example.test/v1",
+      endpoint: "http://127.0.0.1:43118/mock",
       model: "text-embedding-model",
       dimensions: 1536,
       metric: "cosine",
       credentialSelector: "packed-openai-key",
-      allowPrivateEndpoint: false,
+      allowPrivateEndpoint: true,
       redirectPolicy: "error"
     },
     vector: { kind: "sqlite" }
@@ -130,9 +130,9 @@ try {
       kind: "seedbed-local-build-v1",
       selector: "gnolith-seedbed-local-build-v1",
       pullPolicy: "never",
-      componentLockSha256: "d41872d741f1a6f0f5e10a5572e48b2a47851c143a515327b90acebddd258644",
-      graphSha256: "abf40b3390a7f3659810a74417708a0775cc190f22654cb253df488932b79896",
-      composeBundleSha256: "e856f03d669e80615f91b609eaee4d0ca37e3b86e424f803e47a4008e9727a36"
+      componentLockSha256: "58d02ab29cc5befce674e3b43ad7d4cc6e23baedbbfba6dcfb929b693fe62b87",
+      graphSha256: "fb27c985660e8ff66145ad7a15eed0e229d771cf099c91ac25c9743fcdf8bcdc",
+      composeBundleSha256: "213220261f6d2953172ed0d1259dcac854fc36b643e4f78e30000af82d36907e"
     },
     semantic: {
       configuration: semanticConfiguration,
@@ -176,24 +176,32 @@ try {
       credentialId: "packed-credential",
       sha256: alembic.sha256(token)
     },
-    environmentSelector: "GNOLITH_BEARER_TOKEN"
+    environmentSelector: "GNOLITH_BEARER_TOKEN",
+    waystone: plan.waystone
   });
   let seedbedResumeCalls = 0;
+  let approvedSeedbedPlan = seedbedPlan;
   const seedbed = {
     inspect: (selector) => exactSeedbed.inspect(selector),
-    plan: (request) => exactSeedbed.plan(request),
-    apply: async (approvedPlan) => packedSeedbedReceipt(approvedPlan),
+    plan: async (request) => {
+      approvedSeedbedPlan = await exactSeedbed.plan(request);
+      return approvedSeedbedPlan;
+    },
+    apply: async (approvedPlan) => {
+      approvedSeedbedPlan = approvedPlan;
+      return packedSeedbedReceipt(approvedPlan);
+    },
     resume: async (operationId) => {
-      assert.equal(operationId, seedbedPlan.id);
+      assert.equal(operationId, approvedSeedbedPlan.id);
       seedbedResumeCalls += 1;
-      return packedSeedbedReceipt(seedbedPlan);
+      return packedSeedbedReceipt(approvedSeedbedPlan);
     },
     diagnose: async (selector) => ({
       installationId: selector.installationId,
       classification: "local-workshop-unavailable",
       repair: {
         kind: "seedbed-resume-operation-v1",
-        operationId: seedbedPlan.id,
+        operationId: approvedSeedbedPlan.id,
         action: "restart-recorded-compose"
       }
     })
@@ -208,8 +216,15 @@ try {
     expected,
     docker
   }, seedbed);
-  assert.deepEqual(plan.seedbedPlan.request, seedbedPlan.request);
-  assert.equal(plan.seedbedLocalBuildTrust.seedbedCandidateSha256, "5bf4142667ffad07c39d4da2e2861b80f0736c82f87f86135b2c7c4b8567a797");
+  assert.deepEqual(plan.seedbedPlan.request, {
+    ...seedbedPlan.request,
+    baseIri: "https://example.test/packed",
+    expected: {
+      ...seedbedPlan.request.expected,
+      baseIri: "https://example.test/packed"
+    }
+  });
+  assert.equal(plan.seedbedLocalBuildTrust.seedbedCandidateSha256, "5d62c83953bfb1a6a96294fe849a38187b723c1183334bf676f04192aa28f9ef");
   assert.equal(plan.semanticProfile.fingerprint, semanticFingerprint);
   assert.equal(plan.semanticProfile.revision, 1);
   assert.equal(JSON.stringify(plan.semanticProfile).includes(semanticCredentialPath), false);
@@ -292,7 +307,7 @@ try {
     authentication: { kind: "environment", variable: "GNOLITH_BEARER_TOKEN" },
     expected,
     semanticProfile: plan.semanticProfile,
-    protectedFile: packedSeedbedReceipt(seedbedPlan).protectedTokenFile
+    protectedFile: packedSeedbedReceipt(approvedSeedbedPlan).protectedTokenFile
   };
   for (const semanticState of [
     { ...workshopStatus.semanticState, fingerprint: "0".repeat(64) },
@@ -324,7 +339,7 @@ try {
       return true;
     }
   );
-  assert.equal(seedbedResumeCalls, 1);
+  assert.equal(seedbedResumeCalls, 2);
   const stoppedDiagnosis = await new alembic.AlembicControlPlane({ seedbed }).diagnose({
     taskDirectory: projectRoot,
     confirmedProjectRoot: projectRoot,
@@ -339,7 +354,7 @@ try {
   });
   assert.equal(repaired.state, "activation-required");
   assert.equal(repaired.failureClassification, "none");
-  assert.equal(seedbedResumeCalls, 2);
+  assert.equal(seedbedResumeCalls, 3);
   assert.equal(fetchCalls, 0);
 
   await assert.rejects(

@@ -38,7 +38,7 @@
       ]
     },
     "previousReceipt": { "type": ["string", "null"] },
-    "failureClassification": { "enum": ["none", "workshop-stopped", "repair-failed"] },
+    "failureClassification": { "enum": ["none", "workshop-stopped", "repair-failed", "seedbed-timeout"] },
     "message": { "type": "string" }
   }
 }

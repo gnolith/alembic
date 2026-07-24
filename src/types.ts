@@ -198,6 +198,18 @@ export interface InstallationInspection {
   installationId: string | null;
   state: string;
 }
+export interface WaystoneEvidenceV1 {
+  enabled: true;
+  prefix: "/app";
+  manifestSha256: string;
+  entrypoint: {
+    path: string;
+    sha256: string;
+    bytes: number;
+    mediaType: string;
+  };
+  reservedPaths: readonly ["/", "/mcp", "/health/live", "/health/ready"];
+}
 export interface InstallationPlan {
   id: string;
   digest: string;
@@ -208,6 +220,7 @@ export interface InstallationPlan {
     kind: "external-directory";
     canonicalPath: string;
   };
+  waystone?: WaystoneEvidenceV1;
 }
 export interface InstallationReceipt {
   operationId: string;
@@ -223,6 +236,7 @@ export interface InstallationReceipt {
     revision: number;
     state: "ready" | "degraded" | "unconfigured";
   } | null;
+  waystone?: WaystoneEvidenceV1;
   protectedTokenFile: ProtectedFileSelector;
   environmentSelector: typeof LOCAL_BEARER_ENV;
 }
@@ -235,12 +249,16 @@ export interface InstallationDiagnosis {
     action: "restart-recorded-compose";
   };
 }
+export interface SeedbedCallOptions {
+  signal: AbortSignal;
+  deadlineMs: number;
+}
 export interface SeedbedControl {
-  inspect(request: InstallationSelector): Promise<InstallationInspection>;
-  plan(request: DockerInstallationRequest): Promise<InstallationPlan>;
-  apply(plan: InstallationPlan): Promise<InstallationReceipt>;
-  resume(operationId: string): Promise<InstallationReceipt>;
-  diagnose(request: InstallationSelector): Promise<InstallationDiagnosis>;
+  inspect(request: InstallationSelector, options?: SeedbedCallOptions): Promise<InstallationInspection>;
+  plan(request: DockerInstallationRequest, options?: SeedbedCallOptions): Promise<InstallationPlan>;
+  apply(plan: InstallationPlan, options?: SeedbedCallOptions): Promise<InstallationReceipt>;
+  resume(operationId: string, options?: SeedbedCallOptions): Promise<InstallationReceipt>;
+  diagnose(request: InstallationSelector, options?: SeedbedCallOptions): Promise<InstallationDiagnosis>;
 }
 
 export interface PlanRequest {
@@ -330,7 +348,7 @@ export interface AlembicReceipt {
   verificationDigest: string | null;
   semanticVerification: WorkshopStatusOutput["semanticState"] | null;
   previousReceipt: string | null;
-  failureClassification: "none" | "workshop-stopped" | "repair-failed";
+  failureClassification: "none" | "workshop-stopped" | "repair-failed" | "seedbed-timeout";
   message: string;
 }
 

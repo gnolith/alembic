@@ -23,6 +23,10 @@ import {
   temporaryProject,
   workshopStatus
 } from "./helpers.js";
+import type {
+  InstallationSelector,
+  SeedbedCallOptions
+} from "../src/types.js";
 
 test("Docker-local apply invokes Seedbed, verifies protocol, writes config last, and requires new task", async () => {
   const root = await temporaryProject();
@@ -55,6 +59,206 @@ test("Docker-local apply invokes Seedbed, verifies protocol, writes config last,
   assert.doesNotMatch(config, new RegExp(protectedCredential.token, "u"));
   assert.equal(receipt.checkpoints.at(-1)?.step, "config-write");
   assert.equal(receipt.checkpoints.at(-1)?.phase, "after");
+});
+
+test("diagnosis bounds hung Seedbed calls and prioritizes stopped Workshop over activation", async () => {
+  const root = await temporaryProject();
+  const protectedCredential = await protectedToken(root);
+  process.env.GNOLITH_BEARER_TOKEN = protectedCredential.token;
+  const seedbed = new MockSeedbed(protectedCredential.path, protectedCredential.digest);
+  const docker = {
+    installationId: expectedStatus.installationId,
+    baseIri: expectedStatus.baseIri,
+    endpoint: "http://127.0.0.1/mcp",
+    image: localBuildSelection,
+    expected: expectedStatus
+  };
+  const plan = await createPlan({
+    taskDirectory: root,
+    confirmedProjectRoot: root,
+    action: "create",
+    mode: "docker-local",
+    endpoint: docker.endpoint,
+    authentication: { kind: "environment", variable: "GNOLITH_BEARER_TOKEN" },
+    expected: expectedStatus,
+    docker
+  }, seedbed);
+  const applied = await applyPlan(plan, { seedbed, workshopTransport: new MockWorkshop() });
+  assert.equal(applied.state, "activation-required");
+
+  const stopped = await new AlembicControlPlane({ seedbed }).diagnose({
+    taskDirectory: root,
+    confirmedProjectRoot: root,
+    operationId: plan.operationId,
+    installationId: expectedStatus.installationId
+  });
+  assert.equal(stopped.classification, "workshop-stopped");
+  assert.equal(stopped.repair, "resume-exact-operation");
+
+  class HangingDiagnoseSeedbed extends MockSeedbed {
+    aborted = false;
+    override async diagnose(
+      _request?: InstallationSelector,
+      options?: SeedbedCallOptions
+    ): ReturnType<MockSeedbed["diagnose"]> {
+      return new Promise((_resolve, reject) => {
+        options?.signal.addEventListener("abort", () => {
+          this.aborted = true;
+          reject(new Error("unbounded-child-secret-must-not-surface"));
+        }, { once: true });
+      });
+    }
+  }
+  const hanging = new HangingDiagnoseSeedbed(protectedCredential.path, protectedCredential.digest);
+  const timedOut = await new AlembicControlPlane({
+    seedbed: hanging,
+    diagnoseDeadlineMs: 5
+  }).diagnose({
+    taskDirectory: root,
+    confirmedProjectRoot: root,
+    operationId: plan.operationId,
+    installationId: expectedStatus.installationId
+  });
+  assert.equal(hanging.aborted, true);
+  assert.equal(timedOut.classification, "seedbed-timeout");
+  assert.equal(timedOut.repair, "resume-exact-operation");
+  assert.deepEqual(timedOut.seedbed, {
+    installationId: expectedStatus.installationId,
+    classification: "timeout",
+    repairBound: true
+  });
+  assert.doesNotMatch(JSON.stringify(timedOut), /unbounded-child-secret/u);
+});
+
+test("hung Seedbed apply is aborted and records a stable retryable timeout", async () => {
+  const root = await temporaryProject();
+  const protectedCredential = await protectedToken(root);
+  process.env.GNOLITH_BEARER_TOKEN = protectedCredential.token;
+  const planningSeedbed = new MockSeedbed(protectedCredential.path, protectedCredential.digest);
+  const docker = {
+    installationId: expectedStatus.installationId,
+    baseIri: expectedStatus.baseIri,
+    endpoint: "http://127.0.0.1/mcp",
+    image: localBuildSelection,
+    expected: expectedStatus
+  };
+  const plan = await createPlan({
+    taskDirectory: root,
+    confirmedProjectRoot: root,
+    action: "create",
+    mode: "docker-local",
+    endpoint: docker.endpoint,
+    authentication: { kind: "environment", variable: "GNOLITH_BEARER_TOKEN" },
+    expected: expectedStatus,
+    docker
+  }, planningSeedbed);
+  class HangingApplySeedbed extends MockSeedbed {
+    aborted = false;
+    override async apply(
+      _plan: Parameters<MockSeedbed["apply"]>[0],
+      options?: SeedbedCallOptions
+    ): Promise<Awaited<ReturnType<MockSeedbed["apply"]>>> {
+      return new Promise((_resolve, reject) => {
+        options?.signal.addEventListener("abort", () => {
+          this.aborted = true;
+          reject(new Error("child-process-secret-must-not-surface"));
+        }, { once: true });
+      });
+    }
+  }
+  const hanging = new HangingApplySeedbed(protectedCredential.path, protectedCredential.digest);
+  await assert.rejects(
+    applyPlan(plan, {
+      seedbed: hanging,
+      seedbedDeadlineMs: 5,
+      workshopTransport: new MockWorkshop()
+    }),
+    (error) => {
+      assert.equal((error as { code?: string }).code, "seedbed-apply-timeout");
+      assert.doesNotMatch(String((error as Error).message), /child-process-secret/u);
+      return true;
+    }
+  );
+  assert.equal(hanging.aborted, true);
+  const stored = await new AlembicControlPlane().operationRead({
+    taskDirectory: root,
+    confirmedProjectRoot: root,
+    operationId: plan.operationId
+  });
+  assert.equal(stored.state, "failed");
+  assert.equal(stored.failureClassification, "seedbed-timeout");
+  assert.equal(stored.seedbed?.operationId, plan.seedbedPlan?.id);
+  assert.doesNotMatch(stored.message, /child-process-secret/u);
+  const recovery = new MockSeedbed(protectedCredential.path, protectedCredential.digest);
+  const resumed = await new AlembicControlPlane({
+    seedbed: recovery,
+    workshopTransport: new MockWorkshop()
+  }).operationResume({
+    taskDirectory: root,
+    confirmedProjectRoot: root,
+    operationId: plan.operationId
+  });
+  assert.equal(recovery.applied, 0);
+  assert.equal(recovery.resumed, 1);
+  assert.equal(resumed.state, "activation-required");
+});
+
+test("trailing-slash and no-slash base identities share one replay-safe canonical plan", async () => {
+  const root = await temporaryProject();
+  const protectedCredential = await protectedToken(root);
+  process.env.GNOLITH_BEARER_TOKEN = protectedCredential.token;
+  const seedbed = new MockSeedbed(protectedCredential.path, protectedCredential.digest);
+  const slashExpected = { ...expectedStatus, baseIri: `${expectedStatus.baseIri}/` };
+  const slashDocker = {
+    installationId: slashExpected.installationId,
+    baseIri: slashExpected.baseIri,
+    endpoint: "http://127.0.0.1/mcp",
+    image: localBuildSelection,
+    expected: slashExpected
+  };
+  const slashRequest = {
+    taskDirectory: root,
+    confirmedProjectRoot: root,
+    action: "create" as const,
+    mode: "docker-local" as const,
+    endpoint: slashDocker.endpoint,
+    authentication: { kind: "environment" as const, variable: "GNOLITH_BEARER_TOKEN" as const },
+    expected: slashExpected,
+    docker: slashDocker
+  };
+  const slashPlan = await createPlan(slashRequest, seedbed);
+  const canonicalPlan = await createPlan({
+    ...slashRequest,
+    expected: expectedStatus,
+    docker: {
+      ...slashDocker,
+      baseIri: expectedStatus.baseIri,
+      expected: expectedStatus
+    }
+  }, seedbed);
+  assert.equal(slashPlan.expected.baseIri, expectedStatus.baseIri);
+  assert.equal(slashPlan.seedbedPlan?.request.baseIri, expectedStatus.baseIri);
+  assert.equal(slashPlan.requestDigest, canonicalPlan.requestDigest);
+  await assert.rejects(
+    createPlan({
+      ...slashRequest,
+      expected: { ...slashExpected, baseIri: "https://example.test/other/" }
+    }, seedbed),
+    /canonical identities differ/u
+  );
+
+  const applied = await applyPlan(slashPlan, {
+    seedbed,
+    workshopTransport: new MockWorkshop({
+      ...workshopStatus,
+      baseIri: `${expectedStatus.baseIri}/`
+    })
+  });
+  const replayed = await applyPlan(slashPlan, {
+    seedbed,
+    workshopTransport: new MockWorkshop()
+  });
+  assert.deepEqual(replayed, applied);
 });
 
 test("credential mismatch stops before config mutation with activation prerequisite", async () => {
@@ -379,6 +583,64 @@ test("local-build trust accepts only the exact Seedbed selector and rejects tamp
   );
 });
 
+test("default local plan and receipt require identical Waystone /app evidence", async () => {
+  const root = await temporaryProject();
+  const protectedCredential = await protectedToken(root);
+  process.env.GNOLITH_BEARER_TOKEN = protectedCredential.token;
+  const docker = {
+    installationId: expectedStatus.installationId,
+    baseIri: expectedStatus.baseIri,
+    endpoint: "http://127.0.0.1/mcp",
+    image: localBuildSelection,
+    expected: expectedStatus
+  };
+  const request = {
+    taskDirectory: root,
+    confirmedProjectRoot: root,
+    action: "create" as const,
+    mode: "docker-local" as const,
+    endpoint: docker.endpoint,
+    authentication: { kind: "environment" as const, variable: "GNOLITH_BEARER_TOKEN" as const },
+    expected: expectedStatus,
+    docker
+  };
+  class MissingWaystoneSeedbed extends MockSeedbed {
+    override async plan(input: Parameters<MockSeedbed["plan"]>[0]) {
+      const planned = await super.plan(input);
+      const withoutWaystone = { ...planned };
+      delete withoutWaystone.waystone;
+      return withoutWaystone;
+    }
+  }
+  await assert.rejects(
+    createPlan(request, new MissingWaystoneSeedbed(protectedCredential.path, protectedCredential.digest)),
+    /required default Waystone profile/u
+  );
+
+  const seedbed = new MockSeedbed(protectedCredential.path, protectedCredential.digest);
+  const plan = await createPlan(request, seedbed);
+  class MismatchedWaystoneSeedbed extends MockSeedbed {
+    override async apply(input: Parameters<MockSeedbed["apply"]>[0]) {
+      const receipt = await super.apply(input);
+      return {
+        ...receipt,
+        waystone: {
+          ...receipt.waystone!,
+          manifestSha256: "0".repeat(64)
+        }
+      };
+    }
+  }
+  await assert.rejects(
+    applyPlan(plan, {
+      seedbed: new MismatchedWaystoneSeedbed(protectedCredential.path, protectedCredential.digest),
+      workshopTransport: new MockWorkshop()
+    }),
+    /Waystone evidence differs/u
+  );
+  assert.equal((await inspectConfig(join(root, ".codex", "config.toml"))).digest, null);
+});
+
 test("semantic planning binds a redacted profile and only approved Compose-private endpoints", async () => {
   const root = await temporaryProject();
   const protectedCredential = await protectedToken(root);
@@ -485,7 +747,7 @@ test("semantic planning binds a redacted profile and only approved Compose-priva
       ...request,
       docker: { ...docker, semantic: badPrivate }
     }, seedbed),
-    /explicitly approved Compose-local profile target/u
+    /explicitly approved literal loopback or Compose-local target/u
   );
   await assert.rejects(
     createPlan({
@@ -648,6 +910,128 @@ test("semantic planning binds a redacted profile and only approved Compose-priva
   assert.throws(
     () => verifyPlan({ ...unsigned, digest: sha256(canonicalJson(unsigned)) }),
     /Semantic profile differs/u
+  );
+});
+
+test("protected loopback OpenAI-compatible SQLite profile is accepted, redacted, and verified", async () => {
+  const root = await temporaryProject();
+  const protectedCredential = await protectedToken(root);
+  process.env.GNOLITH_BEARER_TOKEN = protectedCredential.token;
+  const seedbed = new MockSeedbed(protectedCredential.path, protectedCredential.digest);
+  const configuration = {
+    version: 1 as const,
+    id: "semantic-loopback",
+    name: "Semantic Loopback",
+    provider: {
+      kind: "openai-compatible" as const,
+      endpoint: "http://127.0.0.1:43117/mock",
+      model: "mock-embedding",
+      dimensions: 16,
+      metric: "cosine" as const,
+      credentialSelector: "loopback-openai-key",
+      allowPrivateEndpoint: true,
+      redirectPolicy: "error" as const
+    },
+    vector: { kind: "sqlite" as const }
+  };
+  const semantic = {
+    configuration,
+    expectedRevision: 4,
+    credentialSelectors: [{
+      id: "loopback-openai-key",
+      kind: "protected-file-v1" as const,
+      path: protectedCredential.path
+    }]
+  };
+  const docker = {
+    installationId: expectedStatus.installationId,
+    baseIri: expectedStatus.baseIri,
+    endpoint: "http://127.0.0.1/mcp",
+    image: localBuildSelection,
+    semantic,
+    expected: expectedStatus
+  };
+  const request = {
+    taskDirectory: root,
+    confirmedProjectRoot: root,
+    action: "create" as const,
+    mode: "docker-local" as const,
+    endpoint: docker.endpoint,
+    authentication: { kind: "environment" as const, variable: "GNOLITH_BEARER_TOKEN" as const },
+    expected: expectedStatus,
+    docker
+  };
+  const plan = await createPlan(request, seedbed);
+  assert.deepEqual(plan.semanticProfile, {
+    format: "gnolith-alembic-semantic-profile-v1",
+    revision: 5,
+    fingerprint: semanticFingerprint(configuration),
+    configurationId: configuration.id,
+    providerKind: "openai-compatible",
+    vectorKind: "sqlite",
+    providerEndpoint: configuration.provider.endpoint,
+    vectorEndpoint: null,
+    credentialSelectorIds: ["loopback-openai-key"]
+  });
+  assert.doesNotMatch(JSON.stringify(plan.semanticProfile), new RegExp(protectedCredential.path.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&"), "u"));
+  const receipt = await applyPlan(plan, {
+    seedbed,
+    workshopTransport: new MockWorkshop({
+      ...workshopStatus,
+      semanticState: {
+        state: "ready",
+        configured: true,
+        revision: 5,
+        fingerprint: semanticFingerprint(configuration),
+        ready: true
+      }
+    })
+  });
+  assert.deepEqual(receipt.semanticVerification, {
+    state: "ready",
+    configured: true,
+    revision: 5,
+    fingerprint: semanticFingerprint(configuration),
+    ready: true
+  });
+
+  await assert.rejects(
+    createPlan({
+      ...request,
+      docker: {
+        ...docker,
+        semantic: {
+          ...semantic,
+          configuration: {
+            ...configuration,
+            provider: {
+              ...configuration.provider,
+              endpoint: "http://localhost:43117/mock"
+            }
+          }
+        }
+      }
+    }, seedbed),
+    /literal loopback or Compose-local/u
+  );
+  await assert.rejects(
+    createPlan({
+      ...request,
+      docker: {
+        ...docker,
+        semantic: {
+          ...semantic,
+          configuration: {
+            ...configuration,
+            provider: {
+              ...configuration.provider,
+              endpoint: "http://127.0.0.1:43117/mock?redirect=http://10.0.0.1"
+            }
+          }
+        }
+      }
+    }, seedbed),
+    /literal loopback or Compose-local/u
   );
 });
 

@@ -2,7 +2,7 @@ import { mkdtemp, mkdir, realpath, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { canonicalJson, sha256 } from "../src/canonical.js";
-import { semanticFingerprint } from "../src/plans.js";
+import { semanticFingerprint, WAYSTONE_DEFAULT_EVIDENCE } from "../src/plans.js";
 import { WORKSHOP_CATALOG_DIGEST, WORKSHOP_TOOL_NAMES } from "../src/workshop.js";
 import type {
   DockerInstallationRequest,
@@ -22,7 +22,7 @@ export async function temporaryProject(): Promise<string> {
 
 export const expectedStatus: ExpectedWorkshopStatus = {
   installationId: "installation-test",
-  baseIri: "https://example.test/base/",
+  baseIri: "https://example.test/base",
   serverVersion: "0.5.0",
   operationVersion: "11",
   catalogDigest: WORKSHOP_CATALOG_DIGEST,
@@ -40,9 +40,9 @@ export const localBuildSelection = {
   kind: "seedbed-local-build-v1" as const,
   selector: "gnolith-seedbed-local-build-v1" as const,
   pullPolicy: "never" as const,
-  componentLockSha256: "d41872d741f1a6f0f5e10a5572e48b2a47851c143a515327b90acebddd258644",
-  graphSha256: "abf40b3390a7f3659810a74417708a0775cc190f22654cb253df488932b79896",
-  composeBundleSha256: "e856f03d669e80615f91b609eaee4d0ca37e3b86e424f803e47a4008e9727a36"
+  componentLockSha256: "58d02ab29cc5befce674e3b43ad7d4cc6e23baedbbfba6dcfb929b693fe62b87",
+  graphSha256: "fb27c985660e8ff66145ad7a15eed0e229d771cf099c91ac25c9743fcdf8bcdc",
+  composeBundleSha256: "213220261f6d2953172ed0d1259dcac854fc36b643e4f78e30000af82d36907e"
 };
 
 export const workshopStatus: WorkshopStatusOutput = {
@@ -70,6 +70,8 @@ export const workshopStatus: WorkshopStatusOutput = {
   versions: { server: "0.5.0", operationSchema: 2 },
   operationCatalogDigest: WORKSHOP_CATALOG_DIGEST
 };
+
+export const waystoneEvidence = WAYSTONE_DEFAULT_EVIDENCE;
 
 export class MockWorkshop implements WorkshopTransport {
   constructor(
@@ -118,7 +120,8 @@ export class MockSeedbed implements SeedbedControl {
       stateRoot: {
         kind: "external-directory",
         canonicalPath: join(this.tokenPath, "..", "seedbed-state")
-      }
+      },
+      waystone: waystoneEvidence
     };
   }
   async apply(plan: InstallationPlan): Promise<InstallationReceipt> {
@@ -175,7 +178,8 @@ export class MockSeedbed implements SeedbedControl {
         credentialId: "credential-test",
         sha256: this.tokenDigest
       },
-      environmentSelector: "GNOLITH_BEARER_TOKEN"
+      environmentSelector: "GNOLITH_BEARER_TOKEN",
+      ...(plan.waystone === undefined ? {} : { waystone: plan.waystone })
     };
   }
 }

@@ -8,7 +8,7 @@
     "format": { "const": "gnolith-alembic-diagnostic-v1" },
     "purpose": { "const": "bounded-redacted-diagnosis" },
     "classification": {
-      "enum": ["ready", "activation-pending", "workshop-stopped", "repair-failed", "config-conflict", "scope-denied", "network", "tls", "authentication", "identity", "catalog", "readiness", "seedbed", "unknown"]
+      "enum": ["ready", "activation-pending", "workshop-stopped", "repair-failed", "seedbed-timeout", "config-conflict", "scope-denied", "network", "tls", "authentication", "identity", "catalog", "readiness", "seedbed", "unknown"]
     },
     "projectRoot": { "type": "string" },
     "managedState": { "enum": ["absent", "complete", "invalid", "user-owned"] },

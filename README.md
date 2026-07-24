@@ -18,7 +18,9 @@ Remote services are connect-existing only.
   `gnolith-seedbed-local-build-v1` selector, which is never pulled. They bind
   the exact Seedbed candidate, component-lock, rendered graph, and Compose
   bundle digests. Any registry image path remains SHA-256-digest-qualified.
-- Credential selectors—not credential values—are accepted or stored.
+- Credential selectors—not credential values—are accepted or stored. Protected
+  bearer files accept canonical base64url text with at most one terminal LF;
+  ambiguous whitespace, control characters, and malformed UTF-8 are rejected.
 - Workshop verification performs authenticated MCP initialization, requires
   the final ordered 52-operation catalog and digest, and compares the exact
   schema-11/schema-2 `gnolith_status` evidence before config mutation.
@@ -26,14 +28,26 @@ Remote services are connect-existing only.
 - Apply is checkpointed, idempotent, resumable, and writes config last.
 - Optional Docker-local semantic configuration is typed, fingerprint-bound,
   selector-only, and reduced to a redacted plan profile. Only the exact
-  profile-approved Compose hosts `ollama:11434` and `qdrant:6333` may use
-  private HTTP; arbitrary private semantic targets are rejected. Protected
-  OpenAI-compatible profiles may verify ready with SQLite, or with Qdrant when
-  Seedbed's immutable candidate enables that exact profile. Ollama remains
-  degraded unless a separately bound immutable model artifact exists.
+  profile-approved Compose hosts `ollama:11434` and `qdrant:6333`, plus literal
+  loopback addresses with an explicit port, may use private HTTP when
+  `allowPrivateEndpoint` is explicitly true. DNS aliases, arbitrary private
+  targets, credentials, query strings, fragments, and redirects are rejected.
+  Protected OpenAI-compatible profiles may verify ready with SQLite, or with
+  Qdrant when Seedbed's immutable candidate enables that exact profile. Ollama
+  remains degraded unless a separately bound immutable model artifact exists.
 - Repair resumes only the recorded Seedbed operation. Alembic implements no
   restart behavior and reports activation-ready only after fresh authenticated
   Workshop identity, catalog, readiness, and status verification.
+- Base IRIs are canonicalized once before request fingerprints and every
+  downstream comparison, so trailing-slash aliases cannot create divergent
+  plans or false unhealthy states.
+- Every Seedbed plan/apply/resume/diagnose boundary is deadline- and
+  cancellation-bound. Timeouts are recorded as stable redacted retryable
+  outcomes; stopped Workshop state takes precedence over activation guidance.
+- The default local Seedbed plan and receipt must bind identical Waystone
+  evidence for `/app`, its exact manifest/CSS entrypoint, and the unshadowed
+  reserved routes `/`, `/mcp`, `/health/live`, and `/health/ready`. Alembic
+  validates that install evidence but owns no UI routes or assets.
 - Success is `activation-required`: start a new Codex task in the same project.
 
 See [THREAT_MODEL.md](THREAT_MODEL.md), [COMPATIBILITY.md](COMPATIBILITY.md),
