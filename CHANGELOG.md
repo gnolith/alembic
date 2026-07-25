@@ -7,6 +7,7 @@
 - Prove final Docker-local planning from an empty project with an absent bearer value and both default and explicit empty Seedbed state roots.
 - Accept the pinned Workshop semantic diagnostic evidence while strictly rejecting unknown, malformed, nested, oversized, or sensitive status payloads.
 - Bundle the exact Seedbed local-control runtime, prove a fresh offline install, and add SHA-pinned trusted-publisher provenance automation.
+- Bind and verify Seedbed's consolidated Taproot, Workshop, and Waystone owner/runtime provenance, assembly attestation, SBOM, and checksum inventory.
 
 ## 0.1.0 - Unreleased
 

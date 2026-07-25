@@ -8,14 +8,14 @@ export const SEEDBED_LOCAL_BUILD_SELECTION = Object.freeze({
   kind: "seedbed-local-build-v1",
   selector: SEEDBED_LOCAL_BUILD_SELECTOR,
   pullPolicy: "never",
-  componentLockSha256: "fc4577d1b58d8dd015fdd851f08b0ce9554959d6bb818d2e481403aa63875256",
-  graphSha256: "c4806034c18971a838190a2e9a41fe02ec5b5b64e93ea2300a182fdce2353657",
-  composeBundleSha256: "19f98929d597ce8634847eebda27cde5ff9b7a446c522acd4d2b28851d0de06c"
+  componentLockSha256: "35d11806a9310ec4ba56cdffdd12e19b40cc989c471686fdb2b65d6e4c3b3828",
+  graphSha256: "8c3ebd877d97313a43b87c4b8ae757b44c3952648ccca4dd6d2e698151fb3cad",
+  composeBundleSha256: "c08505ab186650f932a24e975d54718d684739ad5e167016703932046e407141"
 } as const);
 
 export const SEEDBED_LOCAL_BUILD_TRUST: SeedbedLocalBuildTrust = Object.freeze({
   format: "gnolith-alembic-seedbed-local-build-trust-v1",
-  seedbedCandidateSha256: "4575ca4d049bcb826812d7e965140a1a99735854c015af959cf1f09163ad75d6",
+  seedbedCandidateSha256: "29184f2b3a112a7b83adda4e1cc605e68a26b13b51cabb395e4ef7d40b65f33e",
   localBuild: SEEDBED_LOCAL_BUILD_SELECTION
 });
 

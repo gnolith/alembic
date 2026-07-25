@@ -219,16 +219,53 @@ async function verifySeedbedLocalBuildArtifacts(coordinate, expected) {
   ) {
     throw new Error("Seedbed candidate component lock has another local-build contract");
   }
+  for (const name of ["taproot", "workshop"]) {
+    if (
+      parsed.packages?.[name]?.sourceCommit !== expected.components[name].commit ||
+      parsed.packages?.[name]?.sha256 !== expected.components[name].sha256
+    ) {
+      throw new Error(`Seedbed ${name} owner binding differs from candidate lock`);
+    }
+  }
+  if (
+    parsed.packages?.waystone?.sourceCommit !== expected.components.waystone.commit ||
+    parsed.packages?.waystone?.sha256 !== expected.components.waystone.manifestSha256
+  ) {
+    throw new Error("Seedbed Waystone owner binding differs from candidate lock");
+  }
+  const waystoneRuntime = packageFile(packageBytes, "package/components/gnolith-waystone-0.3.0.tgz");
+  if (digest(waystoneRuntime) !== expected.components.waystone.runtimeSha256) {
+    throw new Error("Seedbed Waystone runtime archive differs from candidate lock");
+  }
+  const attestation = packageFile(packageBytes, "package/seedbed-assembly-attestation.json");
+  if (digest(attestation) !== expected.attestationSha256) {
+    throw new Error("Seedbed assembly attestation differs from candidate lock");
+  }
+  const attested = JSON.parse(attestation.toString("utf8"));
+  for (const field of ["kind", "selector", "pullPolicy", "componentLockSha256", "graphSha256", "composeBundleSha256"]) {
+    if (attested[field] !== expected.localBuild[field]) {
+      throw new Error(`Seedbed assembly attestation changed ${field}`);
+    }
+  }
   const graphPath = join(dirname(coordinate), expected.graphArtifact);
   const composeBundlePath = join(dirname(coordinate), expected.composeBundleArtifact);
+  const sbomPath = join(dirname(coordinate), "seedbed-sbom.cdx.json");
+  const inventoryPath = join(dirname(coordinate), "SHA256SUMS");
   if (digest(await readFile(graphPath)) !== expected.localBuild.graphSha256) {
     throw new Error("Seedbed graph differs from candidate lock");
   }
   if (digest(await readFile(composeBundlePath)) !== expected.localBuild.composeBundleSha256) {
     throw new Error("Seedbed Compose bundle differs from candidate lock");
   }
+  if (digest(await readFile(sbomPath)) !== expected.sbomSha256) {
+    throw new Error("Seedbed SBOM differs from candidate lock");
+  }
+  if (digest(await readFile(inventoryPath)) !== expected.inventorySha256) {
+    throw new Error("Seedbed checksum inventory differs from candidate lock");
+  }
   return {
     seedbedCandidateSha256: expected.sha256,
-    localBuild: expected.localBuild
+    localBuild: expected.localBuild,
+    components: expected.components
   };
 }
