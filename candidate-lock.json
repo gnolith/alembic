@@ -3,26 +3,27 @@
   "seedbed": {
     "package": "@gnolith/seedbed",
     "version": "0.4.0",
-    "commit": "90cdc022fde988fbad9bed50190509fca431e818",
-    "tree": "87b2d96f2e0e859a5385ee94619a6ca97db1d6ed",
+    "commit": "fdcaea9f0fbfbc0825639f9c24633531c3ff3f78",
+    "tree": "3d3127ca8c4d8cd4a2a38cd66fb239710bc718a8",
     "artifact": "gnolith-seedbed-0.4.0.tgz",
-    "bytes": 1112057,
-    "sha256": "db9b8390860d0d52f3055733b8f355190196dbc48d0325e9da93d761027072bc",
+    "bytes": 1113051,
+    "sha256": "fd3551379ab667006fa5615759096716fc63ba779b15501288132c095c899789",
     "localBuild": {
       "kind": "seedbed-local-build-v1",
       "selector": "gnolith-seedbed-local-build-v1",
       "pullPolicy": "never",
-      "componentLockSha256": "cf65ee42f61bede0bcb6b444444eb71ae6dfd20762b45ffdc1ab4b94e9555dbe",
-      "graphSha256": "adddbbf4f1341e75dbf7a6b823bf7e490f63e8818f2a9ce51d4c8409b38ad4e3",
-      "composeBundleSha256": "a5d2a649e9191089428520e1c82da507814b0224c6b101e593b76085db589fc4"
+      "componentLockSha256": "eb28cb988b0c507d5c9ef4242ec13895af2c8cd8f2c57ba722d01eb89b55ed7d",
+      "graphSha256": "e400df1282ea7bb395a634abd267936137ab358091afb6cfa37618ccc4c75909",
+      "composeBundleSha256": "5d5d9aab98e21a019f551b36f28fe8fcacb4f2183ab2cdef1350e6b3185a2a52"
     },
     "composeBundleArtifact": "seedbed-compose-bundle.tar.gz",
-    "composeBundleSha256": "a5d2a649e9191089428520e1c82da507814b0224c6b101e593b76085db589fc4",
-    "sbomSha256": "548a000c3324d62c0b4bede0c1c832bd8bc03db98d3beef1a2352226a64e64a0",
+    "composeBundleSha256": "5d5d9aab98e21a019f551b36f28fe8fcacb4f2183ab2cdef1350e6b3185a2a52",
+    "sbomSha256": "04f5fd70212d935c0ef82f958b4dbf22116627a348a625f98da43d6b51b28644",
+    "inventorySha256": "d99c988d3558ccd7b4bf087f0944aafa53dd9a40a9676c83acd56dfbdf93c0f7",
     "graphArtifact": "compose-graph.json",
-    "graphSha256": "adddbbf4f1341e75dbf7a6b823bf7e490f63e8818f2a9ce51d4c8409b38ad4e3",
-    "componentLockSha256": "cf65ee42f61bede0bcb6b444444eb71ae6dfd20762b45ffdc1ab4b94e9555dbe",
-    "attestationSha256": "3794a130211ec2679ca5c655d63ae95f2236ea4388ea6ca15d0b0e0db6c2f295"
+    "graphSha256": "e400df1282ea7bb395a634abd267936137ab358091afb6cfa37618ccc4c75909",
+    "componentLockSha256": "eb28cb988b0c507d5c9ef4242ec13895af2c8cd8f2c57ba722d01eb89b55ed7d",
+    "attestationSha256": "3eadb3c98deb8f38cd07a6b353c0f6bd70333bb99ba7c3287612d52bad13bb39"
   },
   "workshop": {
     "package": "@gnolith/workshop",
