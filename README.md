@@ -23,8 +23,10 @@ inspection, planning, and verification do not initialize Seedbed or Docker.
   coordinates, expiry, and operation ID.
 - Docker-local plans accept Seedbed's exact versioned
   `gnolith-seedbed-local-build-v1` selector, which is never pulled. They bind
-  the exact Seedbed candidate, component-lock, rendered graph, and Compose
-  bundle digests. Any registry image path remains SHA-256-digest-qualified.
+  the exact Seedbed candidate, component-lock, assembly attestation, rendered
+  graph, Compose bundle, SBOM, checksum inventory, and the Taproot, Workshop,
+  and Waystone owner/runtime provenance carried by that graph. Any registry
+  image path remains SHA-256-digest-qualified.
 - Credential selectors—not credential values—are accepted or stored. Protected
   bearer files accept canonical base64url text with at most one terminal LF;
   ambiguous whitespace, control characters, and malformed UTF-8 are rejected.
@@ -71,8 +73,10 @@ npm run gate
 npm run candidate
 ```
 
-`candidate` verifies the exact Seedbed package/component-lock/graph/Compose
-bundle and Workshop package, runs packed semantic plan/apply/repair,
+`candidate` verifies the exact Seedbed package/component-lock/attestation,
+graph/Compose bundle/SBOM/checksum inventory, its Taproot/Workshop/Waystone
+owner bindings and Waystone runtime archive, plus the Workshop package. It
+runs packed semantic plan/apply/repair,
 Workshop-52/no-pull, and nine-tool Alembic integration, then drives the actual
 packed stdio MCP through bounded plan and valid/invalid legacy requests. A
 fresh offline install of that archive must contain exactly one
