@@ -23,6 +23,20 @@ test("installed MCP initializes as Alembic and lists the exact fixed catalog", a
   });
   const lines: string[] = [];
   let stdout = "";
+  let resolveResponses!: () => void;
+  let rejectResponses!: (error: Error) => void;
+  const responses = new Promise<void>((resolve, reject) => {
+    resolveResponses = resolve;
+    rejectResponses = reject;
+  });
+  const deadline = setTimeout(
+    () => rejectResponses(new Error(`MCP returned only ${lines.length} responses before the deadline`)),
+    5_000
+  );
+  child.once("error", rejectResponses);
+  child.once("exit", (code) => {
+    if (lines.length < 3) rejectResponses(new Error(`MCP exited with code ${String(code)} after ${lines.length} responses`));
+  });
   child.stdout.setEncoding("utf8");
   child.stdout.on("data", (chunk: string) => {
     stdout += chunk;
@@ -32,6 +46,7 @@ test("installed MCP initializes as Alembic and lists the exact fixed catalog", a
       stdout = stdout.slice(newline + 1);
       if (line.length > 0) lines.push(line);
     }
+    if (lines.length >= 3) resolveResponses();
   });
   child.stdin.write(JSON.stringify({ jsonrpc: "2.0", id: 1, method: "initialize", params: {} }) + "\n");
   child.stdin.write(JSON.stringify({ jsonrpc: "2.0", id: 2, method: "tools/list", params: {} }) + "\n");
@@ -41,9 +56,12 @@ test("installed MCP initializes as Alembic and lists the exact fixed catalog", a
     method: "tools/call",
     params: { name: "not_an_alembic_tool", arguments: {} }
   }) + "\n");
-  await new Promise((resolve) => setTimeout(resolve, 200));
-  child.kill();
-  assert.equal(lines.length >= 3, true);
+  try {
+    await responses;
+  } finally {
+    clearTimeout(deadline);
+    child.kill();
+  }
   const initialized = JSON.parse(lines[0]!) as { result: { serverInfo: { name: string }; instructions: string } };
   assert.equal(initialized.result.serverInfo.name, "alembic");
   assert.match(initialized.result.instructions, /never a proxy/u);
