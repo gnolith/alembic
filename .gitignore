@@ -3,5 +3,6 @@ dist/
 dist-test/
 artifacts/
 *.tgz
+!vendor/gnolith-seedbed-0.4.0.tgz
 *.log
 .DS_Store

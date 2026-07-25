@@ -1,0 +1,32 @@
+name: Publish
+on:
+  release:
+    types: [published]
+permissions:
+  contents: read
+jobs:
+  publish:
+    if: startsWith(github.event.release.tag_name, 'v')
+    runs-on: ubuntu-latest
+    environment: npm
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          ref: ${{ github.event.release.tag_name }}
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+          cache: npm
+      - name: Require exact release tag and clean preflight
+        shell: bash
+        run: |
+          test "v$(node -p "require('./package.json').version")" = "${{ github.event.release.tag_name }}"
+          npm ci
+          npm run gate
+          npm pack --dry-run
+      - name: Publish with npm trusted publishing
+        run: npm publish --access public --provenance

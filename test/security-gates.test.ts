@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 
@@ -54,5 +55,37 @@ test("workflows have least privilege and no hosted provisioning", async () => {
     const body = await readFile(path, "utf8");
     assert.doesNotMatch(body, /permissions:\s*write-all/iu);
     assert.doesNotMatch(body, /\b(?:cloudflare|codex sites|deploy)\b/iu);
+    for (const action of body.matchAll(/uses:\s*([^@\s]+)@([^\s#]+)/gu)) {
+      assert.match(action[2]!, /^[0-9a-f]{40}$/u, `${action[1]} must be pinned to an immutable commit`);
+    }
   }
+});
+
+test("public release is trusted-publisher only and package bundles exact Seedbed runtime", async () => {
+  const manifest = JSON.parse(await readFile(join(root, "package.json"), "utf8")) as {
+    publishConfig: { access: string; provenance: boolean };
+    dependencies: Record<string, string>;
+    bundleDependencies: string[];
+    peerDependencies?: Record<string, string>;
+  };
+  assert.deepEqual(manifest.publishConfig, { access: "public", provenance: true });
+  assert.equal(manifest.dependencies["@gnolith/seedbed"], "0.4.0");
+  assert.deepEqual(manifest.bundleDependencies, ["@gnolith/seedbed"]);
+  assert.equal(manifest.peerDependencies?.["@gnolith/seedbed"], undefined);
+  const candidateLock = JSON.parse(await readFile(join(root, "candidate-lock.json"), "utf8")) as {
+    seedbed: { sha256: string };
+  };
+  const bundledSeedbed = await readFile(join(root, "vendor", "gnolith-seedbed-0.4.0.tgz"));
+  assert.equal(createHash("sha256").update(bundledSeedbed).digest("hex"), candidateLock.seedbed.sha256);
+  const lock = JSON.parse(await readFile(join(root, "package-lock.json"), "utf8")) as {
+    packages: Record<string, { version?: string; resolved?: string; inBundle?: boolean }>;
+  };
+  assert.equal(lock.packages["node_modules/@gnolith/seedbed"]?.version, "0.4.0");
+  assert.equal(lock.packages["node_modules/@gnolith/seedbed"]?.resolved, "file:vendor/gnolith-seedbed-0.4.0.tgz");
+  assert.equal(lock.packages["node_modules/@gnolith/seedbed"]?.inBundle, true);
+
+  const release = await readFile(join(root, ".github", "workflows", "release.yml"), "utf8");
+  assert.match(release, /id-token:\s*write/u);
+  assert.match(release, /npm publish --access public --provenance/u);
+  assert.doesNotMatch(release, /NODE_AUTH_TOKEN|NPM_TOKEN|npm_[A-Za-z0-9_-]*token/iu);
 });

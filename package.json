@@ -5,6 +5,10 @@
   "license": "MIT",
   "type": "module",
   "private": false,
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
   "engines": {
     "node": ">=22.0.0"
   },
@@ -40,9 +44,16 @@
     "test": "npm run build:test && node --test --test-reporter=spec dist-test/test/core.test.js dist-test/test/apply.test.js dist-test/test/legacy.test.js dist-test/test/network.test.js",
     "test:security": "npm run build:test && node --test --test-reporter=spec dist-test/test/security-gates.test.js",
     "test:plugin": "npm run build:test && node --test --test-reporter=spec dist-test/test/plugin.test.js",
-    "gate": "npm run clean && npm ci && npm run lint && npm test && npm run test:security && npm run test:plugin && npm run build && npm audit --omit=dev --audit-level=high && npm pack --dry-run",
+    "test:install": "node scripts/packed-install-gate.mjs",
+    "gate": "npm run clean && npm ci && npm run lint && npm test && npm run test:security && npm run test:plugin && npm run build && npm run test:install && npm audit --omit=dev --audit-level=high && npm pack --dry-run",
     "candidate": "node scripts/candidate.mjs"
   },
+  "dependencies": {
+    "@gnolith/seedbed": "0.4.0"
+  },
+  "bundleDependencies": [
+    "@gnolith/seedbed"
+  ],
   "devDependencies": {
     "@eslint/js": "9.39.2",
     "@types/node": "24.10.4",
@@ -51,13 +62,9 @@
     "typescript-eslint": "8.51.0"
   },
   "peerDependencies": {
-    "@gnolith/seedbed": "0.4.0",
     "@gnolith/workshop": "0.5.0"
   },
   "peerDependenciesMeta": {
-    "@gnolith/seedbed": {
-      "optional": true
-    },
     "@gnolith/workshop": {
       "optional": true
     }

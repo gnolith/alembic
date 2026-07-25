@@ -23,6 +23,13 @@ const coordinates = {
     sha256: lock.legacy.sha256
   })
 };
+const bundledSeedbed = await readFile(new URL("../vendor/gnolith-seedbed-0.4.0.tgz", import.meta.url));
+if (
+  digest(bundledSeedbed) !== lock.seedbed.sha256 ||
+  digest(bundledSeedbed) !== coordinates.seedbed.sha256
+) {
+  throw new Error("Bundled Seedbed runtime differs from the exact candidate coordinate");
+}
 coordinates.seedbed.localBuild = await verifySeedbedLocalBuildArtifacts(
   coordinates.seedbed.coordinate,
   lock.seedbed
@@ -38,6 +45,14 @@ if (!Array.isArray(packed) || packed.length !== 1) throw new Error("Unexpected n
 const archiveName = packed[0].filename;
 const archivePath = join(fileURLToPath(artifacts), archiveName);
 const archiveDigest = digest(await readFile(archivePath));
+await exec(
+  process.execPath,
+  [
+    fileURLToPath(new URL("./packed-install-proof.mjs", import.meta.url)),
+    archivePath
+  ],
+  { cwd: root, maxBuffer: 20 * 1024 * 1024 }
+);
 await exec(
   process.execPath,
   [
@@ -77,6 +92,22 @@ const inventory = {
   ],
   dataPlane: { identity: "gnolith", path: "/mcp", statusTool: "gnolith_status" },
   markerFormat: "ALEMBIC MANAGED GNOLITH MCP v1",
+  distribution: {
+    seedbedRuntime: {
+      package: "@gnolith/seedbed",
+      version: "0.4.0",
+      bundled: true,
+      sha256: coordinates.seedbed.sha256,
+      freshOfflineInstallProof: "PASS",
+      localControlMethods: ["inspect", "plan", "apply", "resume", "diagnose"],
+      duplicateVersions: 0
+    },
+    remoteOnlyStartupProof: "PASS",
+    publishAccess: "public",
+    provenance: true,
+    trustedPublisherOidc: true,
+    immutableActionPins: true
+  },
   releasePublished: false
 };
 await writeFile(new URL("../artifacts/inventory.json", import.meta.url), JSON.stringify(inventory, null, 2) + "\n");
@@ -94,13 +125,18 @@ const report = {
     "npm run test:security",
     "npm run test:plugin",
     "npm run build",
+    "npm run test:install",
     "npm audit --omit=dev --audit-level=high",
-    "npm pack --dry-run"
+    "npm pack --dry-run",
+    "fresh offline packed install and bundled Seedbed local-control proof",
+    "packed Seedbed plan/apply/repair/resume and Workshop status adversaries",
+    "packed nine-tool MCP blackbox"
   ],
   result: "PASS",
   productionVulnerabilitiesHighCritical: 0,
   releasePublished: false,
   mismatches: [],
+  distribution: inventory.distribution,
   artifactSha256: archiveDigest,
   sbomSha256: sbomDigest,
   coordinates
