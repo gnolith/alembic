@@ -55,11 +55,11 @@
     "@gnolith/seedbed"
   ],
   "devDependencies": {
-    "@eslint/js": "9.39.2",
-    "@types/node": "24.10.4",
-    "eslint": "9.39.2",
-    "typescript": "5.9.3",
-    "typescript-eslint": "8.51.0"
+    "@eslint/js": "10.0.1",
+    "@types/node": "26.1.1",
+    "eslint": "10.8.0",
+    "typescript": "7.0.2",
+    "typescript-eslint": "8.65.0"
   },
   "peerDependencies": {
     "@gnolith/workshop": "0.5.0"
