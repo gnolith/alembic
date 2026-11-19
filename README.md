@@ -1,5 +1,7 @@
 # Alembic
 
+> **Retired.** Active use of this repository has ended.
+
 Alembic is the Codex setup and diagnostics control plane for Gnolith. It is
 never the Gnolith data plane or a proxy. After activation, ordinary work uses
 Workshop directly through the project-scoped `gnolith` MCP connection.
